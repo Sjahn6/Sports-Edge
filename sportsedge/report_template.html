@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SportsEdge</title>
+<style>
+:root{
+  --bg:#f4f2ee; --panel:#ffffff; --ink:#16181d; --muted:#6a6f7a; --line:#e3e0da;
+  --accent:#0f6b4f; --accent-soft:#e2f1ea; --warn:#9a5b00; --warn-soft:#fbefdc;
+  --bad:#a3302a; --chip:#efece6; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#111317; --panel:#1a1d23; --ink:#eceef2; --muted:#9097a3; --line:#2a2e36;
+    --accent:#3fbf8c; --accent-soft:#163a2d; --warn:#e0a54a; --warn-soft:#3a2c14; --bad:#ef6a62; --chip:#232730; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif}
+header{padding:22px 20px 10px;max-width:1200px;margin:0 auto}
+h1{font-size:22px;margin:0;letter-spacing:-.01em}
+h1 span{color:var(--accent)}
+.sub{color:var(--muted);font-size:13px;margin-top:4px}
+nav{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+nav .in{max-width:1200px;margin:0 auto;padding:0 12px;display:flex;gap:2px;overflow-x:auto}
+nav button{background:none;border:0;color:var(--muted);font:inherit;font-weight:600;padding:12px 12px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+nav button.on{color:var(--ink);border-bottom-color:var(--accent)}
+main{max-width:1200px;margin:0 auto;padding:18px 16px 60px}
+section{display:none} section.on{display:block}
+.note{background:var(--warn-soft);color:var(--ink);border-left:3px solid var(--warn);padding:10px 12px;border-radius:6px;font-size:13px;margin-bottom:16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;cursor:pointer;user-select:none;background:var(--panel);position:sticky;top:0}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+.pos{color:var(--accent);font-weight:600} .neg{color:var(--bad)}
+.pill{display:inline-block;padding:2px 8px;border-radius:99px;background:var(--chip);font-size:12px;font-weight:600}
+.pill.go{background:var(--accent-soft);color:var(--accent)}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;font-size:13px;color:var(--muted)}
+.controls input[type=search],.controls select{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
+.controls input[type=search]{min-width:220px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.card .teams{font-weight:700;font-size:16px}
+.card .when{color:var(--muted);font-size:12.5px}
+.kv{display:grid;grid-template-columns:1fr auto auto;gap:4px 14px;margin-top:10px;font-size:13.5px;font-variant-numeric:tabular-nums}
+.kv .h{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em}
+.kv .r{text-align:right}
+.split{height:6px;border-radius:3px;background:var(--chip);overflow:hidden;margin:6px 0 2px}
+.split i{display:block;height:100%;background:var(--accent)}
+details{margin-top:10px;font-size:13px} summary{cursor:pointer;color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.tile .l{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.tile .v{font-size:24px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+.tile .s{color:var(--muted);font-size:12.5px;margin-top:2px}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+svg.spark{vertical-align:middle}
+.small{font-size:12.5px;color:var(--muted)}
+h2{font-size:15px;margin:22px 0 10px}
+.wb{display:flex;height:26px;border-radius:7px;overflow:hidden;margin:10px 0 2px;font-size:12px;font-weight:700}
+.wb span{display:flex;align-items:center;padding:0 8px;white-space:nowrap;background:var(--chip);color:var(--muted);min-width:0;overflow:hidden}
+.wb span + span{justify-content:flex-end}
+.wb span.fav{background:var(--accent);color:#fff}
+.pick{margin-top:12px;padding:10px 12px;border-radius:9px;background:var(--accent-soft)}
+.pick.none{background:var(--chip);color:var(--muted);font-size:13px}
+.pk-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:15.5px}
+.pk-top .pill{margin-left:auto}
+.pk-tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
+.pk-sub{font-size:13px;color:var(--muted);margin-top:2px}
+.pk-why{margin:6px 0 2px;padding-left:18px;font-size:13.5px} .pk-why li{margin:2px 0}
+.pk-story{font-size:13.5px;line-height:1.5;margin:7px 0 4px}
+details.more{margin-top:10px} details.more > summary{font-weight:600;font-size:13px}
+.pill.warnp{background:var(--warn-soft);color:var(--warn)}
+.lsw{display:flex;gap:6px;margin-bottom:10px}
+.lsw button{font:inherit;font-weight:700;font-size:13px;padding:6px 14px;border-radius:99px;border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer}
+.lsw button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.lsw .pill{margin-left:4px;font-size:11px;padding:1px 6px}
+@media (max-width:640px){ header{padding:16px 16px 6px} main{padding:14px 12px 60px} .grid{grid-template-columns:1fr} th,td{padding:8px 8px} .controls input[type=search]{min-width:0;flex:1} }
+.why{margin-top:8px;font-size:13px}
+.why ul{margin:6px 0 0;padding-left:18px} .why li{margin:3px 0}
+.steps{display:grid;grid-template-columns:1fr auto;gap:2px 14px;font-variant-numeric:tabular-nums;margin:6px 0}
+.steps .sub{font-weight:700;border-top:1px solid var(--line);padding-top:2px}
+.inj{font-size:12.5px;margin:4px 0 0} .inj b{font-weight:600}
+.st-out{color:var(--bad);font-weight:600} .st-q{color:var(--warn);font-weight:600}
+.linkbtn{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:2px 8px;font:inherit;font-size:12px;cursor:pointer}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;z-index:20;padding:40px 16px;overflow:auto}
+#modal.on{display:flex}
+#modal .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;max-width:640px;width:100%;padding:18px 20px}
+#modal .x{float:right;background:none;border:0;font-size:20px;color:var(--muted);cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <div class="lsw" id="lsw"></div>
+  <h1>Sports<span>Edge</span> · <span id="lg"></span></h1>
+  <div class="sub" id="sub"></div>
+</header>
+<nav><div class="in">
+  <button data-t="chalk" class="on">-200 plays</button>
+  <button data-t="bets">Best bets</button>
+  <button data-t="games">Games</button>
+  <button data-t="injuries">Injuries</button>
+  <button data-t="teams">Teams</button>
+  <button data-t="players">Players</button>
+  <button data-t="check">Model check</button>
+</div></nav>
+<main>
+  <section id="chalk" class="on">
+    <div class="note" id="ch-note"></div>
+    <h2 style="margin-top:0">Moneyline favorites in your price range</h2>
+    <div class="controls">
+      <label><input type="checkbox" id="ch-pos" checked> Only show +EV</label>
+    </div>
+    <div class="panel tablewrap"><table id="t-chalk"></table></div>
+    <h2>Alternate lines worth taking at <span class="tp"></span></h2>
+    <p class="small">If your book's alternate line menu offers one of these at <span class="tp"></span> or better, the model says it's a +EV bet. "Lay up to −3" means −3, −2.5, −2 and so on all qualify. The app doesn't pull alternate lines itself, so check these against your book.</p>
+    <div class="panel tablewrap"><table id="t-alt"></table></div>
+    <h2>Do the model's win chances hold up?</h2>
+    <p class="small" id="cal-sub"></p>
+    <div class="panel tablewrap"><table id="t-cal"></table></div>
+  </section>
+  <section id="bets">
+    <div class="note" id="bets-note"></div>
+    <div class="controls">
+      <label>Market <select id="b-mkt"><option value="">Spreads and totals</option><option value="spread">Spreads</option><option value="total">Totals</option><option value="moneyline">Moneylines</option></select></label>
+      <label>Min EV <select id="b-ev"><option value="0.02">2%</option><option value="0.03">3%</option><option value="0.05">5%</option><option value="0">Show all</option></select></label>
+    </div>
+    <div class="panel tablewrap"><table id="t-bets"></table></div>
+  </section>
+  <section id="games"><div class="grid" id="g-grid"></div></section>
+  <section id="injuries">
+    <p class="small" id="inj-sub"></p>
+    <div class="controls">
+      <input type="search" id="i-q" placeholder="Search player or team">
+      <select id="i-st"><option value="">All statuses</option><option value="impact">Affects this week's line</option><option>Out</option><option>Doubtful</option><option>Questionable</option><option>Injured Reserve</option></select>
+    </div>
+    <div class="panel tablewrap"><table id="t-inj"></table></div>
+  </section>
+  <section id="teams">
+    <p class="small" id="teams-sub"></p>
+    <div class="panel tablewrap"><table id="t-teams"></table></div>
+  </section>
+  <section id="players">
+    <div class="controls">
+      <input type="search" id="p-q" placeholder="Search player or team">
+      <select id="p-cat"></select>
+      <select id="p-pos"><option value="">All positions</option></select>
+      <span id="p-count"></span>
+    </div>
+    <div class="panel tablewrap"><table id="t-players"></table></div>
+    <p class="small">Each stat shows season average, last 3 game average, and a game by game trend.</p>
+  </section>
+  <section id="check"><div id="c-body"></div></section>
+</main>
+<div id="modal"><div class="box"><button class="x" onclick="closeWhy()">×</button><div id="m-body"></div></div></div>
+<script>
+const ALL = /*__DATA__*/null;
+const CUR = (location.hash.slice(1).split("/")[0] in ALL.leagues) ? location.hash.slice(1).split("/")[0] : ALL.order[0];
+const D = Object.assign({}, ALL.leagues[CUR], {tz: ALL.tz, generated: ALL.generated});
+const U = D.unit, U1 = U === "pts" ? 1 : 2;   // decimals: points 1, goals 2
+const HOME = {nfl:"Home field", nba:"Home court", nhl:"Home ice"}[D.key] || "Home edge";
+const SPREAD = D.key === "nhl" ? "puck line" : "spread";
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pct = (x,d=1) => x==null ? "–" : (x*100).toFixed(d)+"%";
+const num = (x,d=1) => x==null ? "–" : (+x).toFixed(d);
+const sgn = (x,d=1) => x==null ? "–" : (x>0?"+":"")+(+x).toFixed(d);
+const line = p => p==null ? "–" : p==0 ? "PK" : (p>0?"+":"")+(+p).toFixed(1).replace(/\.0$/,"");
+const price = p => p==null ? "–" : (p>0?"+":"")+p;
+const tz = D.tz || undefined;
+const when = iso => new Date(iso).toLocaleString("en-US",{timeZone:tz,weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
+const abbr = (g,side) => g[side+"_short"] || g[side+"_abbr"] || g[side];
+
+function showTab(t){
+  document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x.dataset.t===t));
+  document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id===t));
+  history.replaceState(null, "", "#" + CUR + "/" + t);
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => showTab(b.dataset.t));
+$("#lsw").innerHTML = ALL.order.map(k => {
+  const L = ALL.leagues[k];
+  const n = L.board.filter(g => ["home_ml","away_ml"].some(s => g.best[s] && g.best[s].ev > 0 && g.best[s].price <= L.cfg.band_high && g.best[s].price >= L.cfg.band_low)).length;
+  return `<button class="${k===CUR?"on":""}" onclick="location.hash='${k}/'+(location.hash.split('/')[1]||'chalk');location.reload()">${esc(L.league)}${n?` <span class="pill go">${n}</span>`:""}</button>`;
+}).join("");
+{ const t = location.hash.split("/")[1]; if (t && document.getElementById(t)) showTab(t); }
+
+$("#lg").textContent = `${D.league} ${D.season_label}`;
+$("#sub").textContent = `Updated ${when(D.generated)}` +
+  (D.last_pull ? ` · Lines pulled ${when(D.last_pull)}` : " · No lines pulled yet") +
+  (D.odds_source ? ` from ${D.odds_source}` : "") +
+  (D.credits ? ` · ${D.credits} Odds API credits left` : "") +
+  ` · Model fit on ${D.ratings.games} games, ${HOME.toLowerCase()} ${num(D.ratings.hfa, U1)} ${U}`;
+
+// ---------- sortable tables
+function table(el, cols, data, sortKey, desc=true){
+  let key = sortKey, d = desc;
+  function draw(){
+    const rows = [...data].sort((a,b)=>{
+      const va = cols.find(c=>c.k===key).v(a), vb = cols.find(c=>c.k===key).v(b);
+      if (va==null) return 1; if (vb==null) return -1;
+      return (va>vb?1:va<vb?-1:0)*(d?-1:1);
+    });
+    el.innerHTML = `<thead><tr>${cols.map(c=>`<th class="${c.n?"n":""}" data-k="${c.k}">${c.h}${c.k===key?(d?" ↓":" ↑"):""}</th>`).join("")}</tr></thead>` +
+      `<tbody>${rows.length ? rows.map(r=>`<tr>${cols.map(c=>`<td class="${c.n?"n":""}">${c.f?c.f(r):esc(c.v(r))}</td>`).join("")}</tr>`).join("")
+        : `<tr><td colspan="${cols.length}" class="empty">Nothing to show yet.</td></tr>`}</tbody>`;
+    el.querySelectorAll("th").forEach(th=>th.onclick=()=>{ if(key===th.dataset.k) d=!d; else {key=th.dataset.k; d=true;} draw(); });
+  }
+  draw();
+}
+
+// ---------- injuries + why helpers
+const GAME = Object.fromEntries(D.board.map(g=>[g.id,g]));
+const stClass = s => /out|reserve|doubtful|suspen/i.test(s||"") ? "st-out" : /question/i.test(s||"") ? "st-q" : "";
+function qbFlag(g){
+  if (!g.injuries) return "";
+  for (const side of ["home","away"]) for (const p of g.injuries[side])
+    if (p.starter_qb && p.chance >= 0.25) return `${abbr(g,side)} QB ${p.status.toLowerCase()}`;
+    else if (p.starter_g && p.chance >= 0.25) return `${abbr(g,side)} starting G ${p.status.toLowerCase()}`;
+    else if (D.key==="nba" && p.value >= 2.5 && p.chance >= 0.25) return `${abbr(g,side)} star ${p.status.toLowerCase()}`;
+  return "";
+}
+function injList(g, side){
+  if (!g.injuries) return "";
+  const ps = g.injuries[side].filter(p=>p.chance>0 && (p.pts>=(U1===1?0.1:0.02) || /out|doubtful/i.test(p.status)));
+  if (!ps.length) return `<div class="inj small">${esc(abbr(g,side))}: nothing that moves the line</div>`;
+  return `<div class="inj"><b>${esc(abbr(g,side))}</b> ` + ps.slice(0,6).map(p=>
+    `${esc(p.player)} <span class="small">${esc(p.pos)}</span> <span class="${stClass(p.status)}">${esc(p.status)}</span>${p.pts>=0.05*(U1===1?1:0.1)?` <span class="small">(${num(p.pts,U1)} ${U})</span>`:""}`).join(", ") +
+    (ps.length>6?` <span class="small">+${ps.length-6} more</span>`:"") + `</div>`;
+}
+function whyHtml(g, onlySide){
+  const w = g.why, f = w.factors, H = abbr(g,"home"), A = abbr(g,"away");
+  let h = `<div class="why"><div class="h small" style="text-transform:uppercase;letter-spacing:.04em">How the line was built</div><div class="steps">` +
+    w.steps.map(s=>`<div class="${s.subtotal?"sub":""}">${esc(s.label)}</div><div class="${s.subtotal?"sub":""}" style="text-align:right">${sgn(s.value,U1)}</div>`).join("") + `</div>`;
+  h += `<div class="small">Projected ${D.key==="nhl"?"goals":"score"}: ${esc(H)} ${num(f.home_pts,U1)}, ${esc(A)} ${num(f.away_pts,U1)}` +
+       (g.inj_total ? ` (includes ${sgn(g.inj_total)} on the total for injuries)` : "") + `. Ratings: ${esc(H)} ${sgn(f.home_rating)} (off ${sgn(f.home_off)}, def ${sgn(f.home_def)}), ${esc(A)} ${sgn(f.away_rating)} (off ${sgn(f.away_off)}, def ${sgn(f.away_def)}).` +
+       (f.home_form.n ? ` Last 3 avg margin: ${esc(H)} ${sgn(f.home_form.last3)}, ${esc(A)} ${sgn(f.away_form.last3)}.` : "") + `</div>`;
+  if (g.injuries) h += injList(g,"away") + injList(g,"home");
+  const sides = onlySide ? [onlySide] : ["away_ml","home_ml","away","home","over","under"].filter(k=>g.best[k] && g.best[k].ev >= D.cfg.min_ev);
+  const label = k => k.endsWith("_ml") ? `${abbr(g,k.slice(0,-3))} to win` : k==="home"||k==="away" ? `${abbr(g,k)} ${line(g.best[k].point)}` : `${k==="over"?"Over":"Under"} ${g.best[k].point}`;
+  for (const k of sides){
+    if (!w.reasons[k]) continue;
+    h += `<div style="margin-top:10px"><b>${esc(label(k))} ${price(g.best[k].price)}</b> <span class="small">${esc(g.best[k].title)}</span>` +
+         `<div class="pk-story"><b>Why this play:</b> ${esc(playStory(g,k))}</div><div class="small">The numbers behind it:</div><ul>` +
+         w.reasons[k].map(x=>`<li>${esc(x)}</li>`).join("") + `</ul></div>`;
+  }
+  if (!onlySide && !sides.length) h += `<div class="small" style="margin-top:8px">No side clears the ${pct(D.cfg.min_ev,0)} EV bar, so no pick on this game.</div>`;
+  return h + `</div>`;
+}
+function openWhy(id, side){
+  const g = GAME[id];
+  $("#m-body").innerHTML = `<div class="teams" style="font-weight:700;font-size:16px">${esc(g.away)} at ${esc(g.home)}</div><div class="small">${when(g.kickoff)}</div>` + whyHtml(g, side);
+  $("#modal").classList.add("on");
+}
+function closeWhy(){ $("#modal").classList.remove("on"); }
+$("#modal").onclick = e => { if (e.target.id==="modal") closeWhy(); };
+document.addEventListener("keydown", e => { if (e.key==="Escape") closeWhy(); });
+
+// ---------- best bets
+function betLabel(g,p){
+  if (p.market==="moneyline") return `${p.side==="home"?abbr(g,"home"):abbr(g,"away")} to win`;
+  if (p.market==="spread"){ const t = p.side==="home"?abbr(g,"home"):abbr(g,"away"); return `${t} ${line(p.point)}`; }
+  return `${p.side==="over"?"Over":"Under"} ${num(p.point,1).replace(/\.0$/,"")}`;
+}
+function allPlays(minEv, mkt){
+  const out = [];
+  for (const g of D.board){
+    for (const [k, side, market] of [["home","home","spread"],["away","away","spread"],["over","over","total"],["under","under","total"],["home_ml","home","moneyline"],["away_ml","away","moneyline"]]){
+      const b = g.best[k]; if (!b) continue;
+      if (mkt && market!==mkt) continue;
+      if (b.ev < minEv) continue;
+      const p = {...b, side, market, key:k};
+      const edgePts = market==="moneyline" ? null : market==="spread"
+        ? (side==="home" ? g.exp_margin + p.point : -g.exp_margin + p.point)
+        : (side==="over" ? g.exp_total - p.point : p.point - g.exp_total);
+      out.push({g, p, edgePts});
+    }
+  }
+  return out;
+}
+function drawBets(){
+  const rows = allPlays(+$("#b-ev").value, $("#b-mkt").value);
+  table($("#t-bets"), [
+    {k:"bet",h:"Bet",v:r=>betLabel(r.g,r.p),f:r=>`<b>${esc(betLabel(r.g,r.p))} ${price(r.p.price)}</b>` +
+      (qbFlag(r.g) ? ` <span class="pill warnp">${esc(qbFlag(r.g))}</span>` : "") +
+      (r.edgePts != null && Math.abs(r.edgePts) >= D.warn_gap ? ` <span class="pill warnp" title="Model and market disagree a lot. Check injuries and lineup news first.">check news</span>` : "") +
+      `<div class="small">${esc(abbr(r.g,"away"))} @ ${esc(abbr(r.g,"home"))} · ${when(r.g.kickoff)}</div>`},
+    {k:"pc",h:"Model vs DraftKings",v:r=>r.p.p_cover-r.p.nv,f:r=>`<b>${pct(r.p.p_cover,0)}</b> <span class="small">vs ${pct(r.p.nv,0)}</span>`},
+    {k:"ev",h:"EV",n:1,v:r=>r.p.ev,f:r=>`<span class="pill ${r.p.ev>0?"go":""}">${sgn(r.p.ev*100)}%</span>`},
+    {k:"k",h:"Stake",n:1,v:r=>r.p.kelly,f:r=>`${pct(r.p.kelly,1)} <span class="small">of bankroll</span>`},
+    {k:"why",h:"",v:()=>0,f:r=>`<button class="linkbtn" onclick="openWhy('${r.g.id}','${r.p.key}')">Why</button>`},
+  ], rows, "ev");
+}
+$("#b-ev").onchange = drawBets; $("#b-mkt").onchange = drawBets;
+if (!D.board.length) $("#t-bets").innerHTML = `<tr><td class="empty">No upcoming games in the next 8 days.</td></tr>`; else drawBets();
+
+// ---------- games
+function bar(p){ return `<div class="split"><i style="width:${(p*100).toFixed(1)}%"></i></div>`; }
+function winBar(g){
+  const pa = 1 - g.p_home;
+  return `<div class="wb"><span style="width:${(pa*100).toFixed(1)}%" class="${pa>=0.5?"fav":""}">${esc(abbr(g,"away"))} ${pct(pa,0)}</span><span style="width:${(g.p_home*100).toFixed(1)}%" class="${g.p_home>0.5?"fav":""}">${esc(abbr(g,"home"))} ${pct(g.p_home,0)}</span></div>`;
+}
+const KEYLABEL = {home_ml:"home", away_ml:"away"};
+function pickFor(g){
+  // your style first: a moneyline favorite in the price range, then the best EV play
+  const ok = k => g.best[k] && g.best[k].ev >= D.cfg.min_ev;
+  const band = ["home_ml","away_ml"].filter(k => ok(k) && g.best[k].price <= D.cfg.band_high && g.best[k].price >= D.cfg.band_low);
+  const all = ["home_ml","away_ml","home","away","over","under"].filter(ok).sort((a,b)=>g.best[b].ev-g.best[a].ev);
+  const key = band.sort((a,b)=>g.best[b].ev-g.best[a].ev)[0] || all[0];
+  return key ? {key, b: g.best[key], others: all.filter(k=>k!==key)} : null;
+}
+function pickLabel(g, k){
+  const b = g.best[k];
+  if (k.endsWith("_ml")) return `${abbr(g,k.slice(0,-3))} to win ${price(b.price)}`;
+  if (k==="home"||k==="away") return `${abbr(g,k)} ${line(b.point)} ${price(b.price)}`;
+  return `${k==="over"?"Over":"Under"} ${b.point} ${price(b.price)}`;
+}
+function shortReasons(g, k){
+  const out = [], w = g.why, f = w.factors, H = abbr(g,"home"), A = abbr(g,"away");
+  const side = k.endsWith("_ml") ? k.slice(0,-3) : k;
+  if (side==="over"||side==="under"){
+    out.push(`Projected total ${num(g.exp_total,U1)} vs a line of ${g.best[k].point}`);
+  } else if (D.model==="poisson"){
+    out.push(`Projected goals: ${H} ${num(g.lam[0],1)}, ${A} ${num(g.lam[1],1)}`);
+  } else {
+    const fav = g.exp_margin >= 0 ? H : A;
+    out.push(`Model: ${fav} by ${num(Math.abs(g.exp_margin),1)}` + (g.market_spread!=null ? ` (DraftKings: ${H} ${line(g.market_spread)})` : ""));
+  }
+  const small = D.margin_sd * 0.03;
+  const inj = [];
+  if (g.injuries) for (const sd of ["home","away"]) for (const p of g.injuries[sd]) if (p.pts >= small) inj.push({...p, team: abbr(g,sd)});
+  inj.sort((a,b)=>b.pts-a.pts);
+  if (inj[0]) out.push(`${inj[0].team} without ${inj[0].player} (${inj[0].pos}, ${inj[0].status.toLowerCase()}): ${num(inj[0].pts,U1)} ${U}`);
+  for (const sd of ["home","away"]) if (g.rest && g.rest[sd]) out.push(`${abbr(g,sd)} on a back to back`);
+  const thr = D.margin_sd * 0.3;
+  for (const [sd, fm] of [["home", f.home_form], ["away", f.away_form]]){
+    if (fm && fm.n >= 3 && Math.abs(fm.last3 - fm.season) >= thr)
+      out.push(`${abbr(g,sd)} ${fm.last3 > fm.season ? "hot" : "cold"}: ${sgn(fm.last3,U1)} avg margin last 3 games`);
+  }
+  if (out.length < 3) out.push(`Ratings: ${H} ${sgn(f.home_rating,U1)}, ${A} ${sgn(f.away_rating,U1)}` + (g.neutral ? "" : `, ${HOME.toLowerCase()} ${sgn(f.hfa,U1)}`));
+  return out.slice(0,3);
+}
+function edgeLevel(g, b){
+  const warn = (g.disagree!=null && g.disagree>=D.warn_gap) || (g.disagree_p!=null && g.disagree_p>=0.08);
+  if (warn) return {t:"Check news first", c:"warnp"};
+  return b.ev >= 0.06 ? {t:"Strong edge", c:"go"} : b.ev >= 0.03 ? {t:"Solid edge", c:"go"} : {t:"Small edge", c:""};
+}
+function playStory(g, k){
+  const b = g.best[k], f = g.why.factors, side = k.endsWith("_ml") ? k.slice(0,-3) : k;
+  const H = abbr(g,"home"), A = abbr(g,"away");
+  const n = x => num(Math.abs(x), U1), u = U === "pts" ? "points" : "goals";
+  const pos = t => /s$/i.test(t) ? t + "'" : t + "'s";
+  const out = [];
+  if (side === "over" || side === "under"){
+    const diff = side==="over" ? g.exp_total - b.point : b.point - g.exp_total;
+    out.push(`The model projects ${H} ${num(f.home_pts,U1)} and ${A} ${num(f.away_pts,U1)}, a total of ${num(g.exp_total,U1)}. That's ${n(diff)} ${u} ${side==="over"?"above":"below"} the ${b.point} line, so it wins ${pct(b.p_cover,0)} of the time against ${pct(b.nv,0)} priced in.`);
+    const sgnTo = side==="over" ? 1 : -1;
+    const parts = [
+      [f.home_off*sgnTo, `${pos(H)} offense ${f.home_off>0?"scores":"is"} ${n(f.home_off)} ${u} a game ${f.home_off>0?"more":"below"} than average`],
+      [f.away_off*sgnTo, `${pos(A)} offense ${f.away_off>0?"scores":"is"} ${n(f.away_off)} ${u} a game ${f.away_off>0?"more":"below"} than average`],
+      [f.home_def*sgnTo, `${pos(H)} defense ${f.home_def>0?"gives up":"holds teams to"} ${n(f.home_def)} ${f.home_def>0?"more":"fewer"} than average`],
+      [f.away_def*sgnTo, `${pos(A)} defense ${f.away_def>0?"gives up":"holds teams to"} ${n(f.away_def)} ${f.away_def>0?"more":"fewer"} than average`],
+      [(g.inj_total||0)*sgnTo, `injuries move the total ${sgn(g.inj_total,U1)}`],
+    ].filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]);
+    if (parts[0]) out.push(`The biggest reason: ${parts[0][1]}.`);
+  } else {
+    const me = side, opp = side==="home" ? "away" : "home", T = abbr(g,me), O = abbr(g,opp), s1 = side==="home" ? 1 : -1;
+    const tm = g.exp_margin * s1;
+    if (k.endsWith("_ml")){
+      out.push(D.model==="poisson"
+        ? `The model projects ${T} ${num(g.lam[me==="home"?0:1],1)} goals to ${num(g.lam[me==="home"?1:0],1)} and gives them ${pct(b.p_win,0)} to win, while DraftKings' price only needs ${pct(M_implied(b.price),0)}.`
+        : `The model has ${T} ${tm>=0?"winning by":"losing by"} ${n(tm)} and gives them ${pct(b.p_win,0)} to win, while DraftKings' price only needs ${pct(M_implied(b.price),0)}.`);
+    } else {
+      const cush = tm + b.point;
+      out.push(`The model has ${T} ${tm>=0?"winning by":"losing by"} ${n(tm)}, so ${T} ${line(b.point)} has about a ${n(cush)} ${U==="pts"?"point":"goal"} cushion and covers ${pct(b.p_cover,0)} of the time against ${pct(b.nv,0)} priced in.`);
+    }
+    // what's driving it, from the pick's side
+    let topInj = null;
+    if (g.injuries) for (const p of g.injuries[opp]) if (!topInj || p.pts > topInj.pts) topInj = p;
+    const drivers = [
+      [(f.home_rating - f.away_rating) * s1, `${T} rate ${n(f.home_rating - f.away_rating)} ${u} a game better than ${O} on a neutral ${D.key==="nhl"?"rink":D.key==="nba"?"court":"field"}`],
+      [g.neutral ? 0 : f.hfa * s1, `${T} get ${HOME.toLowerCase()}, worth about ${n(f.hfa)} ${u}`],
+      [(g.inj_margin||0) * s1, topInj && topInj.pts > 0 ? `${O} are without ${topInj.player} (${topInj.pos}, ${topInj.status.toLowerCase()}), worth about ${n(topInj.pts)} ${u}` : `injuries tilt it ${n(g.inj_margin)} ${u} their way`],
+      [(g.rest_margin||0) * s1, `${O} are on the second night of a back to back`],
+    ].filter(x=>x[0] >= D.margin_sd * 0.03).sort((a,b)=>b[0]-a[0]);
+    if (drivers[0]) out.push(`${tm >= 0 ? "Most of that comes from this" : "What keeps it close"}: ${drivers[0][1]}.`);
+    else if (tm < 0) out.push(`${O} are the better team, but the price pays enough to make up for it.`);
+    if (k.endsWith("_ml") && b.price <= D.cfg.band_high && b.price >= D.cfg.band_low)
+      out.push(`This is your ${price(D.cfg.target_price)} style: a strong chance to win with a smaller payout.`);
+    else if (k.endsWith("_ml") && b.price > 0)
+      out.push(b.p_win < 0.5
+        ? `It's an underdog, so it loses more often than it wins. The value is in the payout.`
+        : `DraftKings has them as the underdog, but the model has them as the more likely winner.`);
+  }
+  const warn = (g.disagree!=null && g.disagree>=D.warn_gap) || (g.disagree_p!=null && g.disagree_p>=0.08);
+  if (warn) out.push(`The model and DraftKings disagree a lot here, which often means news the model hasn't caught. Check injuries and lineups before betting.`);
+  return out.join(" ");
+}
+$("#g-grid").innerHTML = D.board.length ? D.board.map(g=>{
+  const bh=g.best.home, ba=g.best.away, bo=g.best.over, bu=g.best.under;
+  const hasLines = g.market_spread!=null || g.moneylines.length;
+  const pk = hasLines ? pickFor(g) : null;
+  const flag = qbFlag(g) || (g.disagree!=null && g.disagree>=D.warn_gap ? "big gap vs market" : "") || (g.disagree_p!=null && g.disagree_p>=0.08 ? "big gap vs market" : "");
+  const books = g.spreads.map(s=>{
+    const t = g.totals.find(t=>t.book===s.book);
+    return `<tr><td>${esc(s.title)}</td><td class="n">${line(s.away.point)} ${price(s.away.price)}</td><td class="n">${line(s.home.point)} ${price(s.home.price)}</td>`+
+      `<td class="n">${t?`${num(t.over.point).replace(/\.0$/,"")} o${price(t.over.price)} u${price(t.under.price)}`:"–"}</td></tr>`;
+  }).join("");
+  const pickHtml = pk ? `
+    <div class="pick">
+      <div class="pk-top"><span class="pk-tag">Pick</span><b>${esc(pickLabel(g,pk.key))}</b><span class="pill ${edgeLevel(g,pk.b).c}">${edgeLevel(g,pk.b).t}</span></div>
+      <div class="pk-sub">Model ${pct(pk.b.p_cover,0)} · need ${pct(M_implied(pk.b.price),0)} to break even · ${sgn(pk.b.ev*100)}% EV</div>
+      <div class="pk-story"><b>Why this play:</b> ${esc(playStory(g,pk.key))}</div>
+      ${pk.others.length ? `<div class="small">Also +EV: ${pk.others.map(k=>esc(pickLabel(g,k))).join(", ")}</div>` : ""}
+    </div>`
+    : `<div class="pick none">${hasLines ? "No bet. Nothing here clears the bar." : "No DraftKings line saved yet."}</div>`;
+  return `<div class="card">
+    <div class="top"><div class="teams">${esc(abbr(g,"away"))} @ ${esc(abbr(g,"home"))}</div><div class="when">${when(g.kickoff)}</div></div>
+    <div class="small">${esc(g.away)} at ${esc(g.home)}${flag?` <span class="pill warnp">${esc(flag)}</span>`:""}</div>
+    ${winBar(g)}
+    ${pickHtml}
+    <details class="more"><summary>Show details</summary>
+    <div class="kv">
+      <div class="h"></div><div class="h r">Model</div><div class="h r">DraftKings</div>
+      ${D.model==="poisson"
+        ? `<div>Projected goals</div><div class="r">${num(g.lam[0],2)}–${num(g.lam[1],2)}</div><div class="r">${g.market_spread==null?"–":esc(abbr(g,"home"))+" "+line(g.market_spread)}</div>`
+        : `<div>${esc(abbr(g,"home"))} ${SPREAD}</div><div class="r">${line(g.model_spread)}</div><div class="r">${line(g.market_spread)}</div>`}
+      <div>Total</div><div class="r">${num(g.model_total,U1===1?1:2)}</div><div class="r">${g.market_total==null?"–":num(g.market_total)}</div>
+      ${g.moneylines.length ? `<div>${esc(abbr(g,"home"))} win chance</div><div class="r">${pct(g.p_home)}</div><div class="r">${pct(g.best.home_ml.nv)}</div>` : ""}
+    </div>
+    ${bh && ba ? `
+      <div class="kv" style="margin-top:12px">
+        <div class="h">Every bet on this game</div><div class="h r">Win %</div><div class="h r">EV</div>
+        ${[["away_ml",g.best.away_ml],["home_ml",g.best.home_ml],["away",ba],["home",bh],["over",bo],["under",bu]].filter(x=>x[1]).map(([k,b])=>
+          `<div>${esc(pickLabel(g,k))}</div><div class="r">${pct(b.p_cover)}</div><div class="r ${b.ev>0?"pos":""}">${sgn(b.ev*100)}%</div>`).join("")}
+      </div>` : ""}
+      ${whyHtml(g)}
+      ${books ? `<div class="tablewrap" style="margin-top:8px"><table>
+        <thead><tr><th>Book</th><th class="n">${esc(abbr(g,"away"))}</th><th class="n">${esc(abbr(g,"home"))}</th><th class="n">Total</th></tr></thead><tbody>${books}</tbody></table></div>` : ""}
+    </details>
+  </div>`;
+}).join("") : `<div class="empty">No upcoming games in the next 8 days.</div>`;
+
+// ---------- -200 plays
+(function(){
+  const tp = D.cfg.target_price, lo = D.cfg.band_low, hi = D.cfg.band_high;
+  document.querySelectorAll(".tp").forEach(e=>e.textContent = price(tp));
+  $("#ch-note").innerHTML = `Laying ${price(tp)} means risking $${-tp} to win $100, so you need to win <b>${pct(M_implied(tp))}</b> of the time to break even. ` +
+    `This tab shows moneylines priced ${price(hi)} to ${price(lo)} where the model's win chance beats the price. Higher win rate, smaller payouts, and one loss erases about two wins, so the cushion matters more than the win rate.`;
+  function rowsFor(onlyPos){
+    const out = [];
+    for (const g of D.board) for (const side of ["home","away"]){
+      const b = g.best[side+"_ml"]; if (!b) continue;
+      if (b.price > hi || b.price < lo) continue;
+      if (onlyPos && b.ev <= 0) continue;
+      out.push({g, side, b, be: M_implied(b.price)});
+    }
+    return out;
+  }
+  function draw(){
+    if (window.innerWidth < 640){
+      const rs = rowsFor($("#ch-pos").checked).sort((a,b)=>b.b.ev-a.b.ev);
+      $("#t-chalk").innerHTML = rs.length ? `<tbody>${rs.map(r=>`<tr><td style="white-space:normal">
+        <div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(abbr(r.g,r.side))} to win ${price(r.b.price)}</b><span class="pill ${r.b.ev>0?"go":""}">${sgn(r.b.ev*100)}% EV</span></div>
+        <div class="small">${esc(abbr(r.g,"away"))} @ ${esc(abbr(r.g,"home"))} · ${when(r.g.kickoff)}${qbFlag(r.g)?" · "+esc(qbFlag(r.g)):""}</div>
+        <div style="margin-top:4px">Need ${pct(r.be)} · model ${pct(r.b.p_win)} · <span class="${r.b.p_win>r.be?"pos":"neg"}">${sgn((r.b.p_win-r.be)*100)}%</span> · stake ${pct(r.b.kelly,1)}
+        <button class="linkbtn" style="float:right" onclick="openWhy('${r.g.id}','${r.side}_ml')">Why</button></div></td></tr>`).join("")}</tbody>`
+        : `<tbody><tr><td class="empty" style="white-space:normal">No favorites in your price range clear the bar right now.</td></tr></tbody>`;
+      return;
+    }
+    table($("#t-chalk"), [
+      {k:"team",h:"Bet",v:r=>abbr(r.g,r.side),f:r=>`<b>${esc(abbr(r.g,r.side))} to win ${price(r.b.price)}</b>` +
+        (qbFlag(r.g)?` <span class="pill warnp">${esc(qbFlag(r.g))}</span>`:"") +
+        `<div class="small">${esc(abbr(r.g,"away"))} @ ${esc(abbr(r.g,"home"))} · ${when(r.g.kickoff)}</div>`},
+      {k:"p",h:"Model vs needed",v:r=>r.b.p_win-r.be,f:r=>`<b>${pct(r.b.p_win,0)}</b> <span class="small">vs ${pct(r.be,0)}</span>
+        <span class="${r.b.p_win>r.be?"pos":"neg"}" style="font-size:12.5px">(${sgn((r.b.p_win-r.be)*100,0)}%)</span>`},
+      {k:"ev",h:"EV",n:1,v:r=>r.b.ev,f:r=>`<span class="pill ${r.b.ev>0?"go":""}">${sgn(r.b.ev*100)}%</span>`},
+      {k:"k",h:"Stake",n:1,v:r=>r.b.kelly,f:r=>`${pct(r.b.kelly,1)} <span class="small">of bankroll</span>`},
+      {k:"why",h:"",v:()=>0,f:r=>`<button class="linkbtn" onclick="openWhy('${r.g.id}','${r.side}_ml')">Why</button>`},
+    ], rowsFor($("#ch-pos").checked), "ev");
+    if (!$("#t-chalk tbody tr td.empty")) return;
+    $("#t-chalk tbody").innerHTML = `<tr><td colspan="5" class="empty">No favorites in your price range clear the bar right now.</td></tr>`;
+  }
+  $("#ch-pos").onchange = draw; draw();
+
+  const altTxt = (x) => x==null ? "–" : (D.model==="poisson" && x===-0.5) ? "moneyline only" : x < 0 ? `lay up to ${line(x)}` : x === 0 ? "PK or better" : `need ${line(x)} or more`;
+  table($("#t-alt"), [
+    {k:"game",h:"Game",v:g=>`${abbr(g,"away")} @ ${abbr(g,"home")}`},
+    {k:"ko",h:"Kickoff",v:g=>g.kickoff,f:g=>when(g.kickoff)},
+    {k:"main",h:"Main line",v:g=>g.market_spread,f:g=>g.market_spread==null?"–":`${esc(abbr(g,"home"))} ${line(g.market_spread)}`},
+    {k:"proj",h:"Model",v:g=>-g.exp_margin,f:g=>`${esc(abbr(g,"home"))} ${line(Math.round(-g.exp_margin*2)/2)}`},
+    {k:"fav",h:"Favorite at "+price(tp),v:g=>Math.min(g.alt.home??99,g.alt.away??99),f:g=>{
+      const side = g.exp_margin >= 0 ? "home" : "away";
+      return `<b>${esc(abbr(g,side))}</b> ${altTxt(g.alt[side])}`;}},
+    {k:"dog",h:"Underdog at "+price(tp),v:g=>0,f:g=>{
+      const side = g.exp_margin >= 0 ? "away" : "home";
+      return `<b>${esc(abbr(g,side))}</b> ${altTxt(g.alt[side])}`;}},
+    {k:"tot",h:"Total (model)",n:1,v:g=>g.exp_total,f:g=>num(g.exp_total)},
+    {k:"ov",h:"Over at "+price(tp),v:g=>g.alt.over,f:g=>g.alt.over==null?"–":`${g.alt.over} or lower`},
+    {k:"un",h:"Under at "+price(tp),v:g=>g.alt.under,f:g=>g.alt.under==null?"–":`${g.alt.under} or higher`},
+  ], D.board, "ko", false);
+
+  const c = D.calibration;
+  $("#cal-sub").textContent = c.n ? `Replayed ${c.n} games from last season and this one, predicting each week using only earlier games. ${c.fitted ? `Win chances are tuned to these results (spread ${num(c.win_sd)} ${U}).` : D.model==="poisson" ? "Win chances come straight from the goals model." : "Not enough games yet to tune, so the default spread is used."} If "actually won" runs well below "model said" in the 65–75% rows, trust the -200 plays less.`
+    : "Not enough finished games yet to check.";
+  table($("#t-cal"), [
+    {k:"lo",h:"Model favorite's win chance",v:r=>r.lo,f:r=>`${Math.round(r.lo*100)}–${Math.round(r.hi*100)}%`},
+    {k:"n",h:"Games",n:1,v:r=>r.n},
+    {k:"pred",h:"Model said",n:1,v:r=>r.pred,f:r=>pct(r.pred)},
+    {k:"act",h:"Actually won",n:1,v:r=>r.actual,f:r=>r.actual==null?"–":`<span class="${r.actual>=r.pred-0.03?"pos":"neg"}">${pct(r.actual)}</span>`},
+  ], c.buckets.filter(r=>r.n), "lo", false);
+})();
+function M_implied(p){ return p < 0 ? -p/(-p+100) : 100/(p+100); }
+
+// ---------- injuries tab
+$("#inj-sub").textContent = D.injuries_pulled ? `ESPN injury report pulled ${when(D.injuries_pulled)}. Line impact is the projected hit to that team's margin in ${U}: player value x chance he sits x how much he's been playing.` : "No injury report pulled yet.";
+$("#bets-note").textContent = {
+  nfl: "The model knows scores, injuries and the market, but not weather or late quarterback news, so a huge edge usually means the book knows something. ",
+  nba: "The model knows scores, injuries, back to backs and the market, but not late scratches or rest days announced near tip, so check lineups before betting. ",
+  nhl: "The model knows goals, injuries, back to backs and the market, but not who's starting in goal until it's on the injury report, so check the starting goalies before betting. ",
+}[D.key] + "Start with small stakes and watch the Model check tab before trusting it. At standard −110 pricing you need to win 52.4% just to break even.";
+function drawInj(){
+  const q = $("#i-q").value.toLowerCase(), st = $("#i-st").value;
+  const list = D.injuries.filter(r => (!q || r.player.toLowerCase().includes(q) || r.team.toLowerCase().includes(q)) &&
+    (!st || (st==="impact" ? (r.pts||0) >= 0.1 : (r.status||"").toLowerCase()===st.toLowerCase())));
+  table($("#t-inj"), [
+    {k:"team",h:"Team",v:r=>r.team},
+    {k:"player",h:"Player",v:r=>r.player,f:r=>`<b>${esc(r.player)}</b>`},
+    {k:"pos",h:"Pos",v:r=>r.position},
+    {k:"status",h:"Status",v:r=>r.status,f:r=>`<span class="${stClass(r.status)}">${esc(r.status)}</span>`},
+    {k:"detail",h:"Injury",v:r=>r.detail},
+    {k:"pts",h:"Line impact",n:1,v:r=>r.pts,f:r=>r.pts==null?"–":num(r.pts)},
+    {k:"why",h:"Basis",v:r=>r.why,f:r=>`<span class="small">${esc(r.why||"")}</span>`},
+    {k:"comment",h:"Note",v:r=>r.comment,f:r=>`<span class="small" style="white-space:normal;display:inline-block;max-width:360px">${esc(r.comment||"")}</span>`},
+  ], list, "pts");
+}
+$("#i-q").oninput = drawInj; $("#i-st").onchange = drawInj; drawInj();
+
+// ---------- teams
+$("#teams-sub").textContent = `Rating = ${U} better than an average team on a neutral ${D.key==="nhl"?"rink":D.key==="nba"?"court":"field"}. Offense and defense are ${U} per game above or below average (negative defense is good). ${D.key==="nhl"?"Puck line":"ATS"} and O/U use the last line this app saved before the game, so they fill in as you keep updating.`;
+const rec = (w,l,t) => `${w}-${l}${t?`-${t}`:""}`;
+table($("#t-teams"), [
+  {k:"team",h:"Team",v:r=>r.team,f:r=>`<b>${esc(r.team)}</b>`},
+  {k:"rating",h:"Rating",n:1,v:r=>r.rating,f:r=>`<span class="${r.rating>0?"pos":"neg"}">${sgn(r.rating,U1)}</span>`},
+  {k:"off",h:"Offense",n:1,v:r=>r.off,f:r=>sgn(r.off,U1)},
+  {k:"def",h:"Defense",n:1,v:r=>-r.def,f:r=>sgn(r.def,U1)},
+  {k:"wl",h:"W-L",n:1,v:r=>r.w-r.l,f:r=>rec(r.w,r.l,r.tie)},
+  {k:"ppg",h:D.key==="nhl"?"GF/G":"PPG",n:1,v:r=>r.ppg,f:r=>num(r.ppg,U1)},
+  {k:"papg",h:D.key==="nhl"?"GA/G":"Opp PPG",n:1,v:r=>r.papg,f:r=>num(r.papg,U1)},
+  {k:"ats",h:D.key==="nhl"?"Puck line":"ATS",n:1,v:r=>r.ats_w-r.ats_l,f:r=>r.ats_w+r.ats_l+r.ats_p?rec(r.ats_w,r.ats_l,r.ats_p):"–"},
+  {k:"ou",h:"O/U",n:1,v:r=>r.ou_o-r.ou_u,f:r=>r.ou_o+r.ou_u+r.ou_p?rec(r.ou_o,r.ou_u,r.ou_p):"–"},
+], D.teams, "rating");
+
+// ---------- players
+const P = D.players.players, L = D.players.stat_labels;
+const cats = [...new Set(P.flatMap(p=>Object.keys(p.cats)))];
+const catOrder = ["passing","rushing","receiving","defensive","interceptions","kicking","players","forwards","defenses","goalies"];
+cats.sort((a,b)=>((catOrder.indexOf(a)+1)||99)-((catOrder.indexOf(b)+1)||99));
+$("#p-cat").innerHTML = cats.map(c=>`<option value="${c}">${c[0].toUpperCase()+c.slice(1)}</option>`).join("");
+[...new Set(P.map(p=>p.pos).filter(Boolean))].sort().forEach(p=>$("#p-pos").insertAdjacentHTML("beforeend",`<option>${esc(p)}</option>`));
+const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
+function spark(vals){
+  if (vals.length<2) return "";
+  const w=70,h=20,mx=Math.max(...vals),mn=Math.min(...vals),r=(mx-mn)||1;
+  const pts = vals.map((v,i)=>`${(i/(vals.length-1)*w).toFixed(1)},${(h-2-(v-mn)/r*(h-4)).toFixed(1)}`).join(" ");
+  return `<svg class="spark" width="${w}" height="${h}"><polyline fill="none" stroke="currentColor" stroke-width="1.5" points="${pts}" style="color:var(--accent)"/></svg>`;
+}
+function drawPlayers(){
+  const cat = $("#p-cat").value, q = $("#p-q").value.toLowerCase(), pos = $("#p-pos").value;
+  const list = P.filter(p=>p.cats[cat] && (!pos||p.pos===pos) && (!q || p.name.toLowerCase().includes(q) || p.team.toLowerCase().includes(q)));
+  const keys = [...new Set(list.flatMap(p=>p.cats[cat].keys))];
+  const main = keys.find(k=>/Yards$|^points$|^goals$|^saves$/.test(k)) || keys.find(k=>/totalTackles|fieldGoalsMade/.test(k)) || keys[0];
+  $("#p-count").textContent = `${list.length} players`;
+  const cols = [
+    {k:"name",h:"Player",v:p=>p.name,f:p=>`<b>${esc(p.name)}</b>`},
+    {k:"team",h:"Team",v:p=>p.team},
+    {k:"pos",h:"Pos",v:p=>p.pos},
+    {k:"gp",h:"GP",n:1,v:p=>p.cats[cat].games.length},
+  ];
+  for (const k of keys){
+    cols.push({k:k,h:(L[k]||k)+" avg",n:1,v:p=>{const a=p.cats[cat].vals[k];return a?avg(a):null},f:p=>{const a=p.cats[cat].vals[k];return a?num(avg(a)):"–"}});
+    cols.push({k:k+"_l3",h:"L3",n:1,v:p=>{const a=p.cats[cat].vals[k];return a?avg(a.slice(-3)):null},f:p=>{
+      const a=p.cats[cat].vals[k]; if(!a) return "–"; const l3=avg(a.slice(-3)), s=avg(a);
+      return `<span class="${l3>s*1.1?"pos":l3<s*0.9?"neg":""}">${num(l3)}</span>`;}});
+    if (k===main) cols.push({k:k+"_t",h:"Trend",v:()=>0,f:p=>{const a=p.cats[cat].vals[k];return a?spark(a):""}});
+  }
+  table($("#t-players"), cols, list, main||"gp");
+}
+["#p-cat","#p-pos"].forEach(s=>$(s).onchange=drawPlayers); $("#p-q").oninput=drawPlayers;
+if (P.length) drawPlayers(); else $("#t-players").innerHTML = `<tr><td class="empty">No player box scores loaded yet.</td></tr>`;
+
+// ---------- model check
+(function(){
+  const b = D.backtest, v = b.vs_market;
+  const tile = (l,val,s) => `<div class="tile"><div class="l">${l}</div><div class="v">${val}</div><div class="s">${s||""}</div></div>`;
+  let h = `<p class="small">${D.key==="nfl"?"Each week from week 4 on":"Each week from three weeks into the season"}, the model is fit only on games before that week and then graded on it. Lower average miss is better (in ${U}).</p><div class="tiles">`;
+  h += tile("Games tested", b.games, `${D.season} regular season`);
+  h += tile("Avg miss, margin", num(b.margin_mae), "points per game");
+  h += tile("Avg miss, total", num(b.total_mae), "points per game");
+  if (v.n_margin) h += tile("Model vs market, margin", `${num(v.margin_model)} / ${num(v.margin_market)}`, `avg miss on ${v.n_margin} games with saved lines`);
+  if (v.n_total) h += tile("Model vs market, total", `${num(v.total_model)} / ${num(v.total_market)}`, `avg miss on ${v.n_total} games with saved lines`);
+  const n = b.bet_w + b.bet_l;
+  h += tile("Flagged bets", n ? `${b.bet_w}-${b.bet_l}${b.bet_p?`-${b.bet_p}`:""}` : "–", n ? `${pct(b.hit)} hit rate, 52.4% breaks even` : "fills in once lines are saved before games");
+  if (n) h += tile("Units", sgn(b.units,2), "1 unit risked per flagged bet");
+  if (b.chalk && b.chalk.n) h += tile("-200 range moneylines", `${b.chalk.w}-${b.chalk.n-b.chalk.w}`, `${sgn(b.chalk.units,2)} units on flagged favorites in your price range`);
+  h += `</div>`;
+  if (b.bets.length){
+    h += `<h2>Graded bets</h2><div class="panel tablewrap"><table id="t-bt"></table></div>`;
+  }
+  $("#c-body").innerHTML = h;
+  if (b.bets.length) table($("#t-bt"), [
+    {k:"week",h:"Wk",n:1,v:r=>r.week},
+    {k:"game",h:"Game",v:r=>r.game},
+    {k:"bet",h:"Bet",v:r=>r.market==="spread"?`${r.side} ${line(r.point)}`:`${r.side} ${r.point}`},
+    {k:"price",h:"Price",n:1,v:r=>r.price,f:r=>price(r.price)},
+    {k:"book",h:"Book",v:r=>r.book},
+    {k:"ev",h:"EV",n:1,v:r=>r.ev,f:r=>sgn(r.ev*100)+"%"},
+    {k:"res",h:"Result",v:r=>r.result,f:r=>`<span class="${r.result==="W"?"pos":r.result==="L"?"neg":""}">${r.result}</span>`},
+  ], b.bets, "week");
+})();
+</script>
+</body>
+</html>
