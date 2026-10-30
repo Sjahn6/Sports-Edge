@@ -984,7 +984,8 @@ if (P.length) drawPlayers(); else $("#t-players").innerHTML = `<tr><td class="em
         `<td class="n ${r.result==="W"?"pos":r.result==="L"?"neg":""}">${r.result==="W"?"Won":r.result==="L"?"Lost":r.result==="P"?"Push":"–"}</td></tr>`).join("") +
       `</tbody></table></div>`;
   } else h += `<div class="panel"><div class="empty">Tracking started today. Bets show up here once their games start.</div></div>`;
-  h += `<h2>Two season replay</h2><p class="small">Every past game was predicted using only the games played before it, then the Picks were graded against the closing betting line ESPN had for that game. Each bet risks 1 unit. Past injury reports aren't kept, so these picks were made without injuries.</p>`;
+  h += `<h2>Two season replay</h2><p class="small">Every past game was predicted using only the games played before it, then the Picks were graded against the closing betting line ESPN had for that game. Each bet risks 1 unit. Past injury reports aren't kept, so these picks were made without injuries.</p>` +
+    ((b.benched||[]).length ? `<p class="small"><b>Graded under today's rules:</b> ${b.benched.map(m=>m==="total"?"totals":m+"s").join(", ")} are on the bench, so they aren't counted as Picks. That rule was set after seeing these results, so this record flatters the model a bit. ${b.old_rules ? `Under the old rules (every bet type) it was ${b.old_rules.bet_w}-${b.old_rules.bet_l}, ${sgn(b.old_rules.units,1)} units.` : ""} The live closing line tracking above is the fair test.</p>` : "");
   const n = b.bet_w + b.bet_l;
   if (!n){
     $("#c-body").innerHTML = h + `<div class="panel"><div class="empty">No past lines yet. They fill in on the next update.</div></div>`;
@@ -1000,7 +1001,7 @@ if (P.length) drawPlayers(); else $("#t-players").innerHTML = `<tr><td class="em
     `</tbody></table></div>`;
   const M = b.by_market, ml = {moneyline:"Moneyline", spread: D.key==="nhl"?"Puck line":"Spread", total:"Total"};
   h += `<h2>By bet type</h2><div class="panel tablewrap"><table><thead><tr><th>Bet</th><th class="n">Record</th><th class="n">Win rate</th><th class="n">Units</th></tr></thead><tbody>` +
-    Object.entries(M).filter(([k,x])=>x.n).map(([k,x]) => `<tr><td><b>${ml[k]}</b></td><td class="n">${x.w}-${x.l}</td><td class="n">${pct(x.hit,1)}</td><td class="n ${unitsCls(x.units)}">${sgn(x.units,1)}</td></tr>`).join("") +
+    Object.entries(M).filter(([k,x])=>x.n).map(([k,x]) => `<tr><td><b>${ml[k]}</b>${(b.benched||[]).includes(k)?` <span class="pill pass">Bench: not counted</span>`:""}</td><td class="n">${x.w}-${x.l}</td><td class="n">${pct(x.hit,1)}</td><td class="n ${unitsCls(x.units)}">${sgn(x.units,1)}</td></tr>`).join("") +
     `</tbody></table></div>`;
   h += `<h2>Most recent graded picks</h2><div class="panel tablewrap"><table id="t-bt"></table></div>`;
   $("#c-body").innerHTML = h;
@@ -1141,16 +1142,18 @@ function renderHome(){
     : `<div class="panel"><div class="empty">No key players out in these games.</div></div>`);
 
   // 5. track record
+  const oldLine = b => (b.benched||[]).length && b.old_rules && b.old_rules.bet_w + b.old_rules.bet_l
+    ? `<div class="s">Old rules with ${b.benched.map(m=>m==="total"?"totals":m+"s").join(", ")}: ${b.old_rules.bet_w}-${b.old_rules.bet_l}, ${sgn(b.old_rules.units,1)}u</div>` : "";
   const clvLine = L => {
     const xs = Object.values((L.clv||{}).status||{}), n = xs.reduce((a,x)=>a+x.n,0), beat = xs.reduce((a,x)=>a+x.beat,0);
     return n ? `<div class="s">Live: beat the closing line on ${beat} of ${n} bets</div>` : `<div class="s">Live closing line tracking: starting now</div>`;
   };
-  h += `<h2>Track record <span class="small" style="font-family:var(--body);font-weight:400">past Picks against the real closing odds, 1 unit each</span></h2><div class="rec">` + ALL.order.map(k => {
+  h += `<h2>Track record <span class="small" style="font-family:var(--body);font-weight:400">past Picks under today's rules, against the real closing odds, 1 unit each</span></h2><div class="rec">` + ALL.order.map(k => {
     const b = ALL.leagues[k].backtest, n = b.bet_w + b.bet_l;
     return `<div class="tile"><div class="l">${esc(ALL.leagues[k].league)}</div>` + (n
       ? `<div class="v">${b.bet_w}-${b.bet_l}${b.bet_p?`-${b.bet_p}`:""}</div><div class="s"><span class="${b.units>0?"pos":b.units<0?"neg":""}">${sgn(b.units,1)} units</span> · ${pct(b.hit,0)} win rate</div>` +
         `<div class="s">${(b.seasons||[]).filter(x=>x.bet_w+x.bet_l).map(x=>`${esc(x.label)}: ${x.bet_w}-${x.bet_l}, ${sgn(x.units,1)}u`).join(" · ")}</div>`
-      : `<div class="v" style="font-size:16px">Building</div><div class="s">Past picks get graded on the next update.</div>`) + clvLine(ALL.leagues[k]) + `</div>`;
+      : `<div class="v" style="font-size:16px">Building</div><div class="s">Past picks get graded on the next update.</div>`) + oldLine(b) + clvLine(ALL.leagues[k]) + `</div>`;
   }).join("") + `</div>`;
   $("#homeview").innerHTML = h;
 }

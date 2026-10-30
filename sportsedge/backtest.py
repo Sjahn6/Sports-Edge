@@ -99,6 +99,11 @@ def run(con, league, cfg, season, preds=None):
     def mae(rs, kp, kt):
         return (sum(abs(r[kp] - r[kt]) for r in rs) / len(rs)) if rs else None
 
+    # grade under today's rules: bet types on the bench (see clv.py) aren't Picks
+    benched = set(cfg.get("benched") or [])
+    all_bets = bets
+    bets = [b for b in all_bets if b["market"] not in benched]
+
     seasons = []
     for s in sorted({r["season"] for r in rows}):
         rs = [r for r in rows if r["season"] == s]
@@ -119,4 +124,7 @@ def run(con, league, cfg, season, preds=None):
         "seasons": seasons,
         "bets": bets[:400],
         **_summary(bets, cfg),
+        "by_market": _summary(all_bets, cfg)["by_market"],   # every bet type, benched ones too
+        "benched": sorted(benched),
+        "old_rules": {k: v for k, v in _summary(all_bets, cfg).items() if k != "by_market"},
     }
