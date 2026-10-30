@@ -165,6 +165,15 @@ th{text-transform:none;letter-spacing:0;font-size:12.5px}
 .pick.none{border-left-color:var(--line)}
 .pick.lean{background:var(--chip);border-left-color:#8aa0b6}
 .whyline{font-size:14px;line-height:1.45;margin:8px 0 2px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;color:var(--muted);margin:0 0 14px}
+.legend > span{display:flex;align-items:center;gap:6px}
+.mu{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px 10px;margin:10px 14px 2px;font-size:13.5px;font-variant-numeric:tabular-nums;align-items:center}
+.mu .mh{font-weight:700;text-align:center;font-size:13px}
+.mu .ml{color:var(--muted);font-size:12.5px}
+.mu .mv{text-align:center}
+.mu .mv.bt{font-weight:700;color:var(--accent)}
+.r5{display:inline-block;width:15px;height:15px;line-height:15px;border-radius:3px;font-size:9.5px;font-style:normal;font-weight:800;margin:0 1px;background:var(--chip);color:var(--muted);text-align:center}
+.r5.w{background:var(--accent);color:#fff} .r5.l{background:var(--bad);color:#fff}
 .mk-h{font-size:13px;font-weight:600;color:var(--muted);margin-top:12px}
 .mkts{margin-top:4px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .mk{display:grid;grid-template-columns:86px 1fr;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);align-items:start}
@@ -265,7 +274,7 @@ button:focus-visible,.hp:focus-visible,.hero:focus-visible,summary:focus-visible
     </div>
     <div class="panel tablewrap"><table id="t-bets"></table></div>
   </section>
-  <section id="games"><div class="grid" id="g-grid"></div></section>
+  <section id="games"><div class="legend"><span><span class="pill go">Pick</span> odds clearly in your favor</span><span><span class="pill">Lean</span> small edge, bet small or skip</span><span><span class="pill pass">Pass</span> fair price, no edge</span></div><div class="grid" id="g-grid"></div></section>
   <section id="injuries">
     <p class="small" id="inj-sub"></p>
     <div class="controls">
@@ -646,6 +655,31 @@ function whyText(g, k, isPick){
     : "The odds are fair, so there's no real edge here.";
   return `${call}. ${why.length ? cap(joinWhy(why)) + ". " : ""}${value}`;
 }
+function matchupHtml(g){
+  // a few easy numbers side by side: record, last 5, scoring, ranking
+  const TS = window.__ts || (window.__ts = {});
+  if (!TS[D.key]) TS[D.key] = Object.fromEntries(D.teams.map(t => [t.team, t]));
+  const a = TS[D.key][g.away], h = TS[D.key][g.home];
+  if (!a || !h || !a.gp || !h.gp) return "";
+  const nT = D.teams.length, u = D.key === "nhl" ? "Goals" : "Points";
+  const dots = r => (r.last5 || "").split("").map(c => `<i class="r5 ${c==="W"?"w":c==="L"?"l":""}">${c}</i>`).join("");
+  const better = (x, y, hi) => x == null || y == null || x === y ? ["",""] : ((x > y) === hi ? ["bt",""] : ["","bt"]);
+  const row = (label, av, hv, cmp) => {
+    const [ca, ch] = cmp || ["",""];
+    return `<div class="ml">${label}</div><div class="mv ${ca}">${av}</div><div class="mv ${ch}">${hv}</div>`;
+  };
+  const rec = t => `${t.w}-${t.l}${t.tie ? "-" + t.tie : ""}`;
+  const dec = D.key === "nhl" ? 2 : 1;
+  return `<div class="mu">
+    <div class="ml"></div><div class="mh">${esc(abbr(g,"away"))}</div><div class="mh">${esc(abbr(g,"home"))}</div>
+    ${row("Record", rec(a), rec(h), better(a.w/a.gp, h.w/h.gp, true))}
+    ${row("Last 5", dots(a), dots(h))}
+    ${row(`${u} scored`, num(a.ppg, dec), num(h.ppg, dec), better(a.ppg, h.ppg, true))}
+    ${row(`${u} allowed`, num(a.papg, dec), num(h.papg, dec), better(a.papg, h.papg, false))}
+    ${row("Power rank", `${a.rank} of ${nT}`, `${h.rank} of ${nT}`, better(a.rank, h.rank, false))}
+    ${row("Away / home", `${a.aw}-${a.al} away`, `${h.hw}-${h.hl} home`)}
+  </div>`;
+}
 function marketSuggestions(g){
   // the model's side in each market: moneyline, spread (puck line), total
   const out = [];
@@ -696,12 +730,11 @@ function cardHtml(g){
       const ln = hasLines ? leanFor(g) : null;
       if (!ln) return `<div class="pick none">No DraftKings line saved yet.</div>`;
       const ed = ln.b.p_cover - M_implied(ln.b.price);
-      const pts = playPoints(g, ln.key).filter(x => x[0] !== "Heads up");
+      const isLean = ed > 0.005;
       return `<div class="pick lean">
-        <div class="pk-top"><b>${esc(pickLabel(g,ln.key))}</b><span class="pill">Lean</span></div>
+        <div class="pk-top"><b>${esc(pickLabel(g,ln.key))}</b><span class="pill ${isLean?"":"pass"}">${isLean?"Lean":"Pass"}</span></div>
         <div class="pk-sub">Win chance <b>${pct(ln.b.p_cover,0)}</b> · Edge <b class="${ed>0?"pos":"neg"}">${sgn(ed*100,0)}%</b></div>
         <div class="whyline"><b>Why:</b> ${esc(whyText(g,ln.key,false))}</div>
-        <div class="small">${ed > 0 ? "Small edge, below the bar for a pick. If you bet it, keep it small." : "The price is about right. No real edge, so this is the model's side, not a bet."}</div>
       </div>`;
     })();
   const jc = teamColors(g);
@@ -709,6 +742,7 @@ function cardHtml(g){
     <div class="top"><div class="teams">${esc(abbr(g,"away"))} @ ${esc(abbr(g,"home"))}</div><div class="when" style="white-space:nowrap">${new Date(g.kickoff).toLocaleString("en-US",{timeZone:tz,weekday:"short",hour:"numeric",minute:"2-digit"})}</div></div>
     <div class="small">${esc(g.away)} at ${esc(g.home)}${flag?` <span class="pill warnp">${esc(flag)}</span>`:""}</div>
     ${winBar(g)}
+    ${matchupHtml(g)}
     ${pickHtml}
     ${hasLines ? `<div class="mk-h">Every bet on this game</div>${marketsHtml(g)}` : ""}
     <details class="more"><summary>Show details</summary>
@@ -931,7 +965,8 @@ function renderDay(){
   }
   picks.sort((a,b)=>b.pk.b.ev - a.pk.b.ev);
   const [w, md] = lab(sel);
-  h += `<div class="dayh"><h2 style="font-size:20px">${new Date(sel+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</h2><span class="small">${todays.length} games</span></div>`;
+  h += `<div class="dayh"><h2 style="font-size:20px">${new Date(sel+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</h2><span class="small">${todays.length} games</span></div>` +
+       `<div class="legend"><span><span class="pill go">Pick</span> odds clearly in your favor</span><span><span class="pill">Lean</span> small edge, bet small or skip</span><span><span class="pill pass">Pass</span> fair price, no edge</span></div>`;
   h += `<h2>Best plays today</h2>` + (picks.length ? `<div class="panel">` + picks.map(p =>
     `<div class="bp" onclick="document.getElementById('card-${p.g.id}').scrollIntoView({behavior:'smooth',block:'start'})">
       <span class="lg" style="--lc:${SPORTC[p.k]}">${esc(ALL.leagues[p.k].league)}</span>

@@ -515,9 +515,12 @@ def team_table(con, league, season, ratings):
     for name in ratings.teams:
         t[name] = {"team": name, "abbr": "", "w": 0, "l": 0, "tie": 0, "pf": 0.0, "pa": 0.0, "gp": 0,
                    "ats_w": 0, "ats_l": 0, "ats_p": 0, "ou_o": 0, "ou_u": 0, "ou_p": 0,
+                   "res": [], "hw": 0, "hl": 0, "aw": 0, "al": 0,
                    "rating": ratings.rating.get(name, 0.0), "off": ratings.offense.get(name, 0.0),
                    "def": ratings.defense.get(name, 0.0)}
     for g in games:
+        if g.get("season_type") not in (2, 3) or g["home"] not in t or g["away"] not in t:
+            continue   # preseason, All-Star and exhibition games don't count toward records
         for side, opp in (("home", "away"), ("away", "home")):
             name = g[side]
             if name not in t:
@@ -529,6 +532,9 @@ def team_table(con, league, season, ratings):
             r["pf"] += pf
             r["pa"] += pa
             r["w" if pf > pa else "l" if pf < pa else "tie"] += 1
+            r["res"].append("W" if pf > pa else "L" if pf < pa else "T")
+            if pf != pa:
+                r[("h" if side == "home" else "a") + ("w" if pf > pa else "l")] += 1
         close = latest_quotes(con, g["id"], before=g["date_utc"])
         sp, tot = consensus(close)
         margin = g["home_score"] - g["away_score"]
@@ -547,7 +553,12 @@ def team_table(con, league, season, ratings):
     for r in out:
         r["ppg"] = r["pf"] / r["gp"] if r["gp"] else None
         r["papg"] = r["pa"] / r["gp"] if r["gp"] else None
+        last = r.pop("res")[-5:]
+        r["last5"] = "".join(last)
+        r["l5w"], r["l5l"] = last.count("W"), last.count("L")
     out.sort(key=lambda r: -r["rating"])
+    for i, r in enumerate(out, 1):
+        r["rank"] = i
     return out
 
 

@@ -53,6 +53,14 @@ def fit(games: list, league, as_of) -> Ratings:
     """games: completed game dicts dated before as_of."""
     games = [g for g in games if g["completed"] and g["home_score"] is not None
              and g.get("season_type") != 1 and parse_iso(g["date_utc"]) < as_of]   # no preseason
+    # drop exhibition opponents (Pro Bowl AFC/NFC, All-Star teams, overseas clubs): a real
+    # team plays at least 5 regular season games in the data
+    reg = {}
+    for g in games:
+        if g.get("season_type") == 2:
+            reg[g["home"]] = reg.get(g["home"], 0) + 1
+            reg[g["away"]] = reg.get(g["away"], 0) + 1
+    games = [g for g in games if reg.get(g["home"], 0) >= 5 and reg.get(g["away"], 0) >= 5]
     teams = sorted({g["home"] for g in games} | {g["away"] for g in games})
     idx = {t: i for i, t in enumerate(teams)}
     n, T = len(games), len(teams)
