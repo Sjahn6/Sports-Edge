@@ -14,7 +14,7 @@ DEFAULTS = {
                 "report": "report.html"},
     "odds": {"source": "espn", "api_key": "", "regions": "us", "bookmakers": "", "markets": "spreads,totals,h2h"},
     "targets": {"price": "-200", "band_low": "-260", "band_high": "-160"},
-    "model": {"market_blend": "0.3", "min_ev": "0.02", "kelly_fraction": "0.25", "seasons_back": "1"},
+    "model": {"market_blend": "0.6", "min_ev": "0.02", "min_edge": "0.03", "kelly_fraction": "0.25", "seasons_back": "1"},
 }
 
 
@@ -30,6 +30,7 @@ def model_cfg(cp):
     from . import injuries
     return {"market_blend": cp.getfloat("model", "market_blend"),
             "min_ev": cp.getfloat("model", "min_ev"),
+            "min_edge": cp.getfloat("model", "min_edge"),
             "kelly_fraction": cp.getfloat("model", "kelly_fraction"),
             "target_price": cp.getint("targets", "price"),
             "band_low": cp.getint("targets", "band_low"),

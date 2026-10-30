@@ -20,7 +20,7 @@ def build_data(con, league, cfg, tz):
     ratings = M.fit(games, league, now)
     preds = CAL.walk_forward(games, league, {season - 1, season}, cfg)
     calib = CAL.run(games, league, season, cfg, preds)
-    cfg = dict(cfg, win_sd=calib["win_sd"])
+    cfg = dict(cfg, win_sd=calib["win_sd"], slope=calib["slope"])
     board = B.build_board(con, league, cfg, ratings, now, season=season)
     inj_rows = B.rows(con, "SELECT team, player, position, status, detail, comment, date FROM injuries "
                            "WHERE league=? ORDER BY team, player", (league.key,))

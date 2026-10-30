@@ -468,7 +468,7 @@ function winBar(g){
 const KEYLABEL = {home_ml:"home", away_ml:"away"};
 function pickFor(g){
   // your style first: a moneyline favorite in the price range, then the best EV play
-  const ok = k => g.best[k] && g.best[k].ev >= D.cfg.min_ev;
+  const ok = k => g.best[k] && g.best[k].ev >= D.cfg.min_ev && (g.best[k].p_cover - M_implied(g.best[k].price)) >= (D.cfg.min_edge ?? 0.03);
   const band = ["home_ml","away_ml"].filter(k => ok(k) && g.best[k].price <= D.cfg.band_high && g.best[k].price >= D.cfg.band_low);
   const all = ["home_ml","away_ml","home","away","over","under"].filter(ok).sort((a,b)=>g.best[b].ev-g.best[a].ev);
   const key = band.sort((a,b)=>g.best[b].ev-g.best[a].ev)[0] || all[0];
@@ -874,7 +874,7 @@ function renderHome(){
     const L = ALL.leagues[k];
     for (const s of ["home_ml","away_ml"]){
       const b = g.best[s];
-      if (b && b.ev >= L.cfg.min_ev && b.price <= L.cfg.band_high && b.price >= L.cfg.band_low) chalk.push({k, g, s, b, day: DAYKEY(g.kickoff)});
+      if (b && b.ev >= L.cfg.min_ev && (b.p_win - M_implied(b.price)) >= (L.cfg.min_edge ?? 0.03) && b.price <= L.cfg.band_high && b.price >= L.cfg.band_low) chalk.push({k, g, s, b, day: DAYKEY(g.kickoff)});
     }
   }
   chalk.sort((a,b)=>a.g.kickoff.localeCompare(b.g.kickoff));

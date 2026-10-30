@@ -58,7 +58,7 @@ def connect(path) -> sqlite3.Connection:
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)
     cols = {r[1] for r in con.execute("PRAGMA table_info(games)")}
-    for c in ("home_short", "away_short"):   # added after the first version
+    for c in ("home_short", "away_short", "home_color", "away_color"):   # added after the first version
         if c not in cols:
             con.execute(f"ALTER TABLE games ADD COLUMN {c} TEXT")
     return con
@@ -77,16 +77,18 @@ def upsert_game(con, g: dict):
     con.execute(
         """INSERT INTO games (id, league, season, season_type, week, date_utc,
                home_id, home, home_abbr, home_short, away_id, away, away_abbr, away_short,
-               home_score, away_score, completed, neutral)
+               home_color, away_color, home_score, away_score, completed, neutral)
            VALUES (:id, :league, :season, :season_type, :week, :date_utc,
                :home_id, :home, :home_abbr, :home_short, :away_id, :away, :away_abbr, :away_short,
-               :home_score, :away_score, :completed, :neutral)
+               :home_color, :away_color, :home_score, :away_score, :completed, :neutral)
            ON CONFLICT(id) DO UPDATE SET
                season=excluded.season, season_type=excluded.season_type,
                week=excluded.week, date_utc=excluded.date_utc,
                home_id=excluded.home_id, home=excluded.home, home_abbr=excluded.home_abbr,
                away_id=excluded.away_id, away=excluded.away, away_abbr=excluded.away_abbr,
                home_short=excluded.home_short, away_short=excluded.away_short,
+               home_color=COALESCE(excluded.home_color, games.home_color),
+               away_color=COALESCE(excluded.away_color, games.away_color),
                home_score=excluded.home_score, away_score=excluded.away_score,
                completed=excluded.completed, neutral=excluded.neutral""",
         g,

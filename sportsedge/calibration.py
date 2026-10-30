@@ -103,12 +103,30 @@ def buckets(preds, pfun):
     return rows
 
 
+def fit_slope(preds):
+    """Ratings are pulled toward average, so projected margins come out too small.
+    Fit actual margin ~ slope x projected margin (through the origin) on games the
+    model hadn't seen, and scale projections by it."""
+    if len(preds) < 150:
+        return 1.0
+    num = sum(p["pm"] * p["margin"] for p in preds)
+    den = sum(p["pm"] * p["pm"] for p in preds)
+    return min(max(num / den, 0.8), 1.8) if den > 0 else 1.0
+
+
 def run(games, league, season, cfg=None, preds=None):
     preds = preds if preds is not None else walk_forward(games, league, {season - 1, season}, cfg)
+    slope = fit_slope(preds)
     if league.model == "poisson":
+        from .gamedist import PoissonGame
         n = sum(1 for p in preds if p["margin"] != 0)
-        return {"win_sd": None, "n": n, "default_sd": None, "fitted": False,
-                "buckets": buckets(preds, lambda p: p["p_model"])}
-    sd, n = fit_win_sd(preds, league.margin_sd)
-    return {"win_sd": sd, "n": n, "default_sd": league.margin_sd, "fitted": n >= 120,
-            "buckets": buckets(preds, lambda p: M.win_prob(p["pm"], sd))}
+
+        def pf(p):
+            t, d = p["pt"], p["pm"] * slope
+            return PoissonGame((t + d) / 2, (t - d) / 2).p_home_win()
+        return {"win_sd": None, "slope": slope, "n": n, "default_sd": None, "fitted": False,
+                "buckets": buckets(preds, pf)}
+    scaled = [dict(p, pm=p["pm"] * slope) for p in preds]
+    sd, n = fit_win_sd(scaled, league.margin_sd)
+    return {"win_sd": sd, "slope": slope, "n": n, "default_sd": league.margin_sd, "fitted": n >= 120,
+            "buckets": buckets(scaled, lambda p: M.win_prob(p["pm"], sd))}

@@ -88,10 +88,11 @@ def parse_event(ev: dict, league: str):
         short = t.get("shortDisplayName") or ""
         if not short or short == full or len(short) <= 4:
             short = nickname(full)
-        return str(t.get("id", "")), full, t.get("abbreviation") or "", short
+        col = (t.get("color") or "").strip("#")
+        return str(t.get("id", "")), full, t.get("abbreviation") or "", short, (col if re.match(r"^[0-9a-fA-F]{6}$", col) else None)
 
-    hid, hname, habbr, hshort = team(home)
-    aid, aname, aabbr, ashort = team(away)
+    hid, hname, habbr, hshort, hcol = team(home)
+    aid, aname, aabbr, ashort, acol = team(away)
     when = comp.get("date") or ev.get("date")
     if not when:
         return None
@@ -102,8 +103,8 @@ def parse_event(ev: dict, league: str):
         "season_type": season.get("type"),
         "week": week,
         "date_utc": parse_iso(when).isoformat(),
-        "home_id": hid, "home": hname, "home_abbr": habbr, "home_short": hshort,
-        "away_id": aid, "away": aname, "away_abbr": aabbr, "away_short": ashort,
+        "home_id": hid, "home": hname, "home_abbr": habbr, "home_short": hshort, "home_color": hcol,
+        "away_id": aid, "away": aname, "away_abbr": aabbr, "away_short": ashort, "away_color": acol,
         "home_score": _num(home.get("score")) if completed else None,
         "away_score": _num(away.get("score")) if completed else None,
         "completed": 1 if completed else 0,

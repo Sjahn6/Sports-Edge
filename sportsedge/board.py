@@ -92,9 +92,12 @@ def build_game(league, cfg, ratings, g, quotes, adj_margin=0.0, adj_total=0.0, a
     blend = cfg["market_blend"]
     neutral = bool(g["neutral"])
     mkt_spread, mkt_total = consensus(quotes)
+    slope = cfg.get("slope") or 1.0     # undo the ratings' pull toward average
     if league.model == "poisson":
         lh = ratings.points(g["home"], g["away"], True, neutral)
         la = ratings.points(g["away"], g["home"], False, neutral)
+        t0, d0 = lh + la, (lh - la) * slope
+        lh, la = (t0 + d0) / 2, (t0 - d0) / 2
         if adj_home_pts:
             lh += adj_home_pts[0]
             la += adj_home_pts[1]
@@ -107,10 +110,23 @@ def build_game(league, cfg, ratings, g, quotes, adj_margin=0.0, adj_total=0.0, a
         ph = model.p_home_win() if mp is None else (1 - blend) * model.p_home_win() + blend * mp
         lh2, la2 = GD.poisson_from_targets(t, ph, home_ot)
         return model, GD.PoissonGame(lh2, la2, home_ot), mkt_spread, mkt_total
-    base_m = ratings.margin(g["home"], g["away"], neutral) + adj_margin
+    base_m = ratings.margin(g["home"], g["away"], neutral) * slope + adj_margin
     base_t = ratings.total(g["home"], g["away"], neutral) + adj_total
-    win_sd = cfg.get("win_sd") or league.margin_sd
-    model = GD.NormalGame(base_m, base_t, league.margin_sd, league.total_sd, win_sd)
+    # The calibrated spread comes from model-only predictions, which are noisier than a
+    # projection blended with DraftKings. Using it on blended games squashes every win
+    # chance toward 50/50 and makes all underdogs look underpriced, so blended games use
+    # the league's normal spread around a market-quality projection.
+    model_sd = cfg.get("win_sd") or league.margin_sd
+    win_sd = league.margin_sd if mkt_spread is not None else model_sd
+    # Better still: read DraftKings' own spread-to-moneyline curve off this game, so a
+    # moneyline only shows an edge when the model really disagrees about the margin.
+    mp = _market_p_home(quotes)
+    if mkt_spread is not None and mp is not None and abs(mkt_spread) >= 1.5 and 0.02 < mp < 0.98:
+        from statistics import NormalDist
+        z = NormalDist().inv_cdf(mp)
+        if z * (-mkt_spread) > 0:   # favorite on the spread is also the moneyline favorite
+            win_sd = min(max(abs(mkt_spread) / abs(z), league.margin_sd * 0.6), league.margin_sd * 1.4)
+    model = GD.NormalGame(base_m, base_t, league.margin_sd, league.total_sd, model_sd)
     em = base_m if mkt_spread is None else (1 - blend) * base_m + blend * (-mkt_spread)
     et = base_t if mkt_total is None else (1 - blend) * base_t + blend * mkt_total
     return model, GD.NormalGame(em, et, league.margin_sd, league.total_sd, win_sd), mkt_spread, mkt_total
@@ -192,7 +208,10 @@ def evaluate_game(g, ratings, quotes, league, cfg, inj=None, form=None, rest=Non
                               ("moneyline", ml_rows, ("home", "away"))):
         for s_ in sides:
             bst = best(rs, s_)
-            if bst and bst["ev"] >= cfg["min_ev"]:
+            # two bars: expected return, and a real win-chance edge over the price. The
+            # second keeps long-shot underdogs (whose payouts magnify small errors) from
+            # crowding out favorites.
+            if bst and bst["ev"] >= cfg["min_ev"] and bst["p_cover"] - M.implied(bst["price"]) >= cfg.get("min_edge", 0.03):
                 plays.append({"market": market, "side": s_, **bst})
     plays.sort(key=lambda p: -p["ev"])
 
@@ -205,6 +224,7 @@ def evaluate_game(g, ratings, quotes, league, cfg, inj=None, form=None, rest=Non
         "id": g["id"], "kickoff": g["date_utc"], "week": g["week"],
         "home": g["home"], "away": g["away"], "home_abbr": g["home_abbr"], "away_abbr": g["away_abbr"],
         "home_short": short(g, "home"), "away_short": short(g, "away"),
+        "home_color": g.get("home_color"), "away_color": g.get("away_color"),
         "neutral": neutral,
         "base_margin": base_margin, "base_total": base_total,
         "inj_margin": inj_margin, "inj_total": inj_total, "rest": rest, "rest_margin": rest_margin,
@@ -425,12 +445,48 @@ def build_board(con, league, cfg, ratings, now, days_ahead=8, season=None):
     icfg = cfg.get("injuries") or {}
     use = INJ.usage(con, league.key, season) if icfg.get("enabled") else None
     form = team_form(con, league.key, season)
+    cfg = dict(cfg, slope=market_scale(league, ratings, games, con))
     out = []
     for g in games:
         inj = INJ.game_adjustment(con, league.key, season, g, icfg, use) if use else None
         rest = back_to_back(con, league, g)
         out.append(evaluate_game(g, ratings, latest_quotes(con, g["id"]), league, cfg, inj, form, rest))
     return out
+
+
+def market_scale(league, ratings, games, con):
+    """How much to stretch the model's margins so they spread out like DraftKings'.
+
+    A model built from scores knows less than the betting market, so its margins sit
+    closer to even. Blended as is, every favorite would look overpriced and every
+    underdog underpriced. Matching the model's spread to the market's across today's
+    slate keeps the disagreements about which team is better and drops that lean."""
+    from . import gamedist as GD
+    pairs = []
+    for g in games:
+        q = latest_quotes(con, g["id"])
+        neutral = bool(g["neutral"])
+        if league.model == "poisson":
+            mp = _market_p_home(q)
+            _, tot = consensus(q)
+            if mp is None:
+                continue
+            lh = ratings.points(g["home"], g["away"], True, neutral)
+            la = ratings.points(g["away"], g["home"], False, neutral)
+            mh, ma = GD.poisson_from_targets(tot or (lh + la), mp)
+            pairs.append((lh - la, mh - ma))
+        else:
+            sp, _ = consensus(q)
+            if sp is None:
+                continue
+            pairs.append((ratings.margin(g["home"], g["away"], neutral), -sp))
+    if len(pairs) < 6:
+        return 1.0
+    rm = (sum(m * m for m, _ in pairs) / len(pairs)) ** 0.5
+    rk = (sum(k * k for _, k in pairs) / len(pairs)) ** 0.5
+    if rm <= 1e-9:
+        return 1.0
+    return min(max(rk / rm, 0.8), 3.0)
 
 
 def back_to_back(con, league, g):

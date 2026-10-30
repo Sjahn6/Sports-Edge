@@ -12,7 +12,8 @@ def run(con, league, cfg, season, preds=None):
     if preds is None:
         preds = CAL.walk_forward(games, league, {season}, cfg)
     if "win_sd" not in cfg and league.model != "poisson":
-        cfg = dict(cfg, win_sd=CAL.run(games, league, season, cfg)["win_sd"])
+        c = CAL.run(games, league, season, cfg)
+        cfg = dict(cfg, win_sd=c["win_sd"], slope=c["slope"])
     rows, bets = [], []
     for p in preds:
         if p["season"] != season:
