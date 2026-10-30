@@ -229,6 +229,11 @@ button:focus-visible,.hp:focus-visible,.hero:focus-visible,summary:focus-visible
 #modal.on{display:flex}
 #modal .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;max-width:640px;width:100%;padding:18px 20px}
 #modal .x{float:right;background:none;border:0;font-size:20px;color:var(--muted);cursor:pointer}
+th[data-tip]{cursor:help}
+.tipq{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:4px;border-radius:50%;
+  font:700 10px/1 var(--body);background:rgba(127,127,127,.18);color:inherit;opacity:.75;vertical-align:1px;cursor:pointer}
+#tipbub{position:fixed;z-index:999;max-width:260px;padding:9px 11px;border-radius:9px;background:#0f1b2d;color:#f3f6fb;
+  font:400 13px/1.4 var(--body);text-transform:none;letter-spacing:0;box-shadow:0 8px 24px rgba(0,0,0,.3);display:none;pointer-events:none;white-space:normal;text-align:left}
 </style>
 </head>
 <body>
@@ -1151,6 +1156,89 @@ if (DAYMODE){
   document.title = "SportsEdge · By day";
   renderDay();
 }
+
+// ---------- column notes: hover a header (or tap the ?) for what it means
+const TIPS = {
+  "Bet": "The bet the model likes, with the DraftKings price.",
+  "Pick": "The bet the model made, with the price it was graded at.",
+  "Win chance": "How often the model thinks this bet wins.",
+  "Edge": "Model's win chance minus the chance the price needs. +5% means it wins 5 points more often than the odds require.",
+  "EV": "Expected value: average profit per $1 if you made this bet many times. +5% = about 5 cents per dollar. Real edges are usually 1 to 5%. Much bigger usually means the model is missing news.",
+  "Stake": "Suggested bet size as a share of your bankroll, based on the edge (quarter Kelly). Smaller is safer.",
+  "Units": "Profit or loss with every bet sized at 1 unit. +3 units at $20 a unit = +$60.",
+  "Result": "How the bet finished.",
+  "Date": "Game date.", "Game": "Away team @ home team.", "Kickoff": "Start time, your time zone.",
+  "Record": "Wins and losses (pushes last).", "W-L": "Wins and losses.",
+  "Win rate": "Share of bets that won, not counting pushes. At −110 you need 52.4% to break even.",
+  "Per bet": "Average profit per 1 unit bet (return on investment).",
+  "Picks": "How many Picks were graded.", "Season": "Season the games were played in.",
+  "Status": "Picks on = the site calls Picks in this bet type. Bench = shown as Lean only until it beats the closing line.",
+  "Beat the close": "How many tracked bets got a better number than DraftKings' final line before the game.",
+  "Avg value": "Average edge over the closing line. 0% = same number as the close. A steady +2 to 3% is what winning bettors look like.",
+  "Value": "How much better the number taken was than the closing number. Positive is good.",
+  "Took": "The line when the site first flagged the bet.", "Closed": "DraftKings' last line before the game.",
+  "Book": "Sportsbook the line is from.",
+  "Main line": "DraftKings' standard spread or total for the game.",
+  "Favorite at": "The spread the favorite would lay to be priced at your target odds.",
+  "Underdog at": "The spread the underdog would get at your target odds.",
+  "Over at": "The total you could take the over at, at your target odds.",
+  "Under at": "The total you could take the under at, at your target odds.",
+  "Model favorite's win chance": "The model's chance that its favorite wins outright.",
+  "Model said": "The model's win chance for games in this group.", "Actually won": "How often those teams really won. Close to Model said = well calibrated.",
+  "Games": "Number of games.", "Basis": "How the number was worked out.",
+  "Team": "Team.", "Rating": "Power rating: points better (+) or worse (−) than an average team on a neutral field.",
+  "Offense": "Points (or goals) scored per game vs league average. + is better.",
+  "Defense": "Points (or goals) allowed per game vs league average. − is better.",
+  "Total (model)": "Model's expected combined score for this team's games.",
+  "Player": "Player.", "Pos": "Position.", "GP": "Games played.",
+  "L3": "Average over the last 3 games. Green = above his season average, red = below.",
+  "Trend": "Game by game, oldest to newest.",
+  "Injury": "Injury and status from ESPN's report.",
+  "Line impact": "How many points (or goals) the model moves the line for this player missing, scaled by the chance he sits.",
+  "Note": "Latest note from the injury report.",
+  "Model": "The model's number for this game.",
+  "PPG": "Points scored per game.", "Opp PPG": "Points allowed per game.",
+  "GF/G": "Goals scored per game.", "GA/G": "Goals allowed per game.",
+  "ATS": "Against the spread: how often the team covered DraftKings' spread (wins-losses-pushes).",
+  "Puck line": "How often the team covered DraftKings' puck line, usually 1.5 goals (wins-losses).",
+  "O/U": "How often this team's games went over or under DraftKings' total (overs-unders).",
+  "Total": "Over/under total.",
+};
+function tipFor(text){
+  const t = text.replace(/[↓↑?]/g,"").trim();
+  if (TIPS[t]) return TIPS[t];
+  for (const k in TIPS) if (t.startsWith(k + " ")) return TIPS[k];
+  if (/ avg$/.test(t)) return "Season average per game.";
+  return null;
+}
+function tipify(root){
+  root.querySelectorAll("th:not([data-tip])").forEach(th => {
+    const tip = tipFor(th.textContent);
+    th.dataset.tip = tip || "";
+    if (tip) th.insertAdjacentHTML("beforeend", `<span class="tipq">?</span>`);
+  });
+}
+const bub = document.createElement("div"); bub.id = "tipbub"; document.body.appendChild(bub);
+let bubFor = null, bubAt = 0;
+function showTip(th){
+  bub.textContent = th.dataset.tip; bub.style.display = "block"; bubFor = th; bubAt = Date.now();
+  const r = th.getBoundingClientRect(), w = bub.offsetWidth;
+  bub.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width/2 - w/2)) + "px";
+  bub.style.top = (r.bottom + 6) + "px";
+}
+function hideTip(){ bub.style.display = "none"; bubFor = null; }
+document.addEventListener("mouseover", e => { const th = e.target.closest && e.target.closest("th[data-tip]");
+  if (th && th.dataset.tip && matchMedia("(hover:hover)").matches) showTip(th); });
+document.addEventListener("mouseout", e => { const th = e.target.closest && e.target.closest("th[data-tip]");
+  if (th && !th.contains(e.relatedTarget) && matchMedia("(hover:hover)").matches) hideTip(); });
+document.addEventListener("click", e => {
+  const q = e.target.closest && e.target.closest(".tipq");
+  if (q){ e.stopPropagation(); e.preventDefault(); const th = q.closest("th"); (bubFor === th && Date.now() - bubAt > 500) ? hideTip() : showTip(th); return; }
+  hideTip();
+}, true);
+window.addEventListener("scroll", () => { if (Date.now() - bubAt > 400) hideTip(); }, true);
+tipify(document);
+new MutationObserver(() => tipify(document)).observe(document.body, {childList:true, subtree:true});
 </script>
 </body>
 </html>
