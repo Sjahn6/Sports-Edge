@@ -100,7 +100,7 @@ def build_world():
                 done = parse_iso(date) < now
                 hs, as_ = sim_score(h, a) if done else (None, None)
                 ev_ = espn_event(str(gid), s, w, date, h, a, done, hs, as_)
-                if not done and s == season:
+                if s == season or done:   # closing lines stay on finished games
                     add_espn_odds(ev_, h, a, new_style=(i % 4 == 0))
                 evs.append(ev_)
                 if done:
@@ -230,6 +230,15 @@ def test_end_to_end(save_to=None):
         PL.update_injuries(con, NFL)
         assert con.execute("SELECT COUNT(*) FROM injuries").fetchone()[0] == 4
 
+        # one time backfill of closing lines for finished games
+        PL.backfill_closing_lines(con, NFL, 1)
+        closed = con.execute("SELECT COUNT(DISTINCT o.game_id) FROM odds o JOIN games g ON g.id=o.game_id "
+                             "WHERE g.completed=1 AND o.fetched_utc < g.date_utc").fetchone()[0]
+        assert closed == done, (closed, done)
+        PL.backfill_closing_lines(con, NFL, 1)   # second call is a no-op
+        assert con.execute("SELECT COUNT(*) FROM odds o JOIN games g ON g.id=o.game_id WHERE g.completed=1").fetchone()[0] == closed * 6
+        con.execute("DELETE FROM odds WHERE game_id IN (SELECT id FROM games WHERE completed=1)")
+        con.commit()
         # free ESPN (DraftKings) lines came in with the schedule
         dk = B.rows(con, "SELECT * FROM odds WHERE book='espn:draftkings'")
         assert len({r["game_id"] for r in dk}) == 16 * 3, len({r["game_id"] for r in dk})

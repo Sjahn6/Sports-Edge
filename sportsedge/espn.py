@@ -235,13 +235,21 @@ def parse_event_odds(ev: dict, g: dict) -> list:
              "fetched_utc": None} for mk, sd, pt, pr, b, t in out]
 
 
-def parse_scoreboard_odds(data: dict, league_key: str) -> list:
+def parse_scoreboard_odds(data: dict, league_key: str, completed=False) -> list:
+    """Lines on the scoreboard. completed=False: upcoming games (current lines).
+    completed=True: finished games, where ESPN keeps the closing line."""
     rows = []
     for ev in data.get("events", []) or []:
         g = parse_event(ev, league_key)
-        if g and not g["completed"]:
+        if g and bool(g["completed"]) == completed:
             rows += parse_event_odds(ev, g)
     return rows
+
+
+def fetch_closing_lines(league, season=None, week=None, season_type=2, dates=None) -> list:
+    url = BASE.format(path=league.espn_path) + "/scoreboard"
+    params = {"dates": dates, "limit": 1000} if dates else {"dates": season, "seasontype": season_type, "week": week}
+    return parse_scoreboard_odds(_get(url, params), league.key, completed=True)
 
 
 # ---------------------------------------------------------------- box score

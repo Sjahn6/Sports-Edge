@@ -38,6 +38,11 @@ def cmd_update(cp, args, odds=True):
             PL.update_games(con, lg, cp.getint("model", "seasons_back"),
                             fetch_players=not args.no_players and not args.lines_only, full=args.full,
                             espn_odds="espn" in cp.get("odds", "source"))
+            if "espn" in cp.get("odds", "source") and not args.lines_only:
+                try:
+                    PL.backfill_closing_lines(con, lg, cp.getint("model", "seasons_back"))
+                except Exception as e:
+                    PL.log(f"  ! closing lines: {e}")
         try:
             if not args.lines_only:
                 PL.update_injuries(con, lg)

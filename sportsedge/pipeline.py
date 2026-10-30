@@ -171,6 +171,45 @@ def update_games(con, league, seasons_back=1, fetch_players=True, full=False, es
         con.commit()
 
 
+def backfill_closing_lines(con, league, seasons_back=1):
+    """One time: save ESPN's closing line for every finished game so past picks can be
+    graded against the real price. Lines are stamped two minutes before kickoff, the
+    same way a live pull right before the game would be."""
+    key = f"{league.key}:closing_backfill_v1"
+    if D.get_meta(con, key) == "1":
+        return
+    now = now_utc()
+    season = season_for(league.key, now)
+    have = {r[0] for r in con.execute(
+        "SELECT DISTINCT o.game_id FROM odds o JOIN games g ON g.id=o.game_id "
+        "WHERE g.league=? AND o.fetched_utc < g.date_utc", (league.key,))}
+    rows, calls = [], 0
+    for s in range(season - seasons_back, season + 1):
+        if league.schedule == "weekly":
+            chunks = [dict(season=s, week=w, season_type=st) for st, w in [(2, w) for w in range(1, 19)] + [(3, w) for w in range(1, 6)]]
+        else:
+            a, b = season_window(league, s)
+            b = min(b, now)
+            chunks = [dict(dates=f"{x:%Y%m%d}-{y:%Y%m%d}") for x, y in _months(a, b)]
+        for c in chunks:
+            try:
+                got = espn.fetch_closing_lines(league, **c)
+            except Exception as e:
+                log(f"  ! closing lines {league.name} {c}: {e}")
+                continue
+            calls += 1
+            rows += [r for r in got if r["game_id"] not in have]
+            time.sleep(0.15)
+    for r in rows:
+        r["fetched_utc"] = (parse_iso(r["commence_utc"]) - timedelta(minutes=2)).isoformat(timespec="seconds")
+    D.save_odds(con, rows)
+    D.set_meta(con, key, "1")
+    con.commit()
+    n_games = len({r["game_id"] for r in rows})
+    books = ", ".join(sorted({r["book_title"] for r in rows})) or "none"
+    log(f"  {league.name} closing lines: {n_games} past games filled in ({books}) from {calls} pulls")
+
+
 def update_injuries(con, league):
     rows = espn.fetch_injuries(league, now_utc().isoformat(timespec="seconds"))
     if not rows:

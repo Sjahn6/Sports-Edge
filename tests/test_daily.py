@@ -124,8 +124,7 @@ class World:
                                 "status": {"type": {"completed": done}},
                                 "competitors": [comp(h, "home", hs), comp(a, "away", as_)]}],
               "_done": done, "_home": h, "_away": a}
-        if not done and season == self.season:
-            ev["competitions"][0]["odds"] = [self.espn_odds(h, a)]
+        ev["competitions"][0]["odds"] = [self.espn_odds(h, a)]   # finished games keep the closing line
         self.events.append(ev)
         if done:
             self.summaries[gid] = self.summary(h, a, hs, as_)
@@ -245,6 +244,10 @@ def run_league(key, seed, save_to=None):
     up = sum(1 for e in w.events if not e["_done"])
     lines = con.execute("SELECT COUNT(DISTINCT game_id) FROM odds").fetchone()[0]
     assert lines == up, (lines, up)
+    PL.backfill_closing_lines(con, lg, 1)
+    closed = con.execute("SELECT COUNT(DISTINCT o.game_id) FROM odds o JOIN games g ON g.id=o.game_id "
+                         "WHERE g.completed=1 AND o.fetched_utc < g.date_utc").fetchone()[0]
+    assert closed == sum(1 for e in w.events if e["_done"]), closed
     # second run: finished months are skipped
     calls = {"n": 0}
     orig = w.get
@@ -285,6 +288,10 @@ def run_league(key, seed, save_to=None):
         assert ig["lam"] and all(0.5 < x < 6 for x in ig["lam"])
         pl_ = ig["best"]["home"]["point"]
         assert abs(pl_) == 1.5, pl_
+    bt = d["backtest"]
+    assert bt["bet_w"] + bt["bet_l"] > 50 and len(bt["seasons"]) >= 1, (bt["bet_w"], bt["bet_l"], bt["seasons"])
+    print(f"   graded: {bt['bet_w']}-{bt['bet_l']} units {bt['units']:+.1f} | " +
+          " | ".join(f"{x['label']} {x['bet_w']}-{x['bet_l']} {x['units']:+.1f}" for x in bt["seasons"]))
     cal = d["calibration"]
     assert cal["n"] > 100, cal["n"]
     print(f"{lg.name} ok: {n} games, rating corr {corr:.2f}, {len(d['board'])} upcoming, "

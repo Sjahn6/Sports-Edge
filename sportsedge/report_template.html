@@ -918,32 +918,36 @@ if (P.length) drawPlayers(); else $("#t-players").innerHTML = `<tr><td class="em
 
 // ---------- model check
 (function(){
-  const b = D.backtest, v = b.vs_market;
-  const tile = (l,val,s) => `<div class="tile"><div class="l">${l}</div><div class="v">${val}</div><div class="s">${s||""}</div></div>`;
-  let h = `<p class="small">${D.key==="nfl"?"Each week from week 4 on":"Each week from three weeks into the season"}, the model is fit only on games before that week and then graded on it. Lower average miss is better (in ${U}).</p><div class="tiles">`;
-  h += tile("Games tested", b.games, `${D.season} regular season`);
-  h += tile("Avg miss, margin", num(b.margin_mae), "points per game");
-  h += tile("Avg miss, total", num(b.total_mae), "points per game");
-  if (v.n_margin) h += tile("Model vs market, margin", `${num(v.margin_model)} / ${num(v.margin_market)}`, `avg miss on ${v.n_margin} games with saved lines`);
-  if (v.n_total) h += tile("Model vs market, total", `${num(v.total_model)} / ${num(v.total_market)}`, `avg miss on ${v.n_total} games with saved lines`);
+  const b = D.backtest;
+  const rec = x => `${x.bet_w}-${x.bet_l}${x.bet_p?`-${x.bet_p}`:""}`;
+  const unitsCls = u => u > 0 ? "pos" : u < 0 ? "neg" : "";
+  let h = `<p class="small">Every past game was predicted using only the games played before it, then the Picks were graded against the closing betting line ESPN had for that game. Each bet risks 1 unit. Past injury reports aren't kept, so these picks were made without injuries.</p>`;
   const n = b.bet_w + b.bet_l;
-  h += tile("Flagged bets", n ? `${b.bet_w}-${b.bet_l}${b.bet_p?`-${b.bet_p}`:""}` : "–", n ? `${pct(b.hit)} hit rate, 52.4% breaks even` : "fills in once lines are saved before games");
-  if (n) h += tile("Units", sgn(b.units,2), "1 unit risked per flagged bet");
-  if (b.chalk && b.chalk.n) h += tile("-200 range moneylines", `${b.chalk.w}-${b.chalk.n-b.chalk.w}`, `${sgn(b.chalk.units,2)} units on flagged favorites in your price range`);
-  h += `</div>`;
-  if (b.bets.length){
-    h += `<h2>Graded bets</h2><div class="panel tablewrap"><table id="t-bt"></table></div>`;
+  if (!n){
+    $("#c-body").innerHTML = h + `<div class="panel"><div class="empty">No past lines yet. They fill in on the next update.</div></div>`;
+    return;
   }
+  h += `<div class="tiles">
+    <div class="tile"><div class="l">Picks graded</div><div class="v">${rec(b)}</div><div class="s">${pct(b.hit,1)} win rate</div></div>
+    <div class="tile"><div class="l">Units won or lost</div><div class="v ${unitsCls(b.units)}">${sgn(b.units,1)}</div><div class="s">${sgn((b.roi||0)*100,1)}% per bet</div></div>
+    ${b.chalk.n ? `<div class="tile"><div class="l">${price(D.cfg.target_price)} range favorites</div><div class="v">${b.chalk.w}-${b.chalk.n-b.chalk.w}</div><div class="s">${sgn(b.chalk.units,1)} units</div></div>` : ""}
+  </div>`;
+  h += `<h2>By season</h2><div class="panel tablewrap"><table><thead><tr><th>Season</th><th class="n">Picks</th><th class="n">Record</th><th class="n">Win rate</th><th class="n">Units</th><th class="n">Per bet</th></tr></thead><tbody>` +
+    b.seasons.map(x => `<tr><td><b>${esc(x.label)}</b></td><td class="n">${x.bet_w+x.bet_l+x.bet_p}</td><td class="n">${rec(x)}</td><td class="n">${pct(x.hit,1)}</td><td class="n ${unitsCls(x.units)}">${sgn(x.units,1)}</td><td class="n">${x.roi==null?"–":sgn(x.roi*100,1)+"%"}</td></tr>`).join("") +
+    `</tbody></table></div>`;
+  const M = b.by_market, ml = {moneyline:"Moneyline", spread: D.key==="nhl"?"Puck line":"Spread", total:"Total"};
+  h += `<h2>By bet type</h2><div class="panel tablewrap"><table><thead><tr><th>Bet</th><th class="n">Record</th><th class="n">Win rate</th><th class="n">Units</th></tr></thead><tbody>` +
+    Object.entries(M).filter(([k,x])=>x.n).map(([k,x]) => `<tr><td><b>${ml[k]}</b></td><td class="n">${x.w}-${x.l}</td><td class="n">${pct(x.hit,1)}</td><td class="n ${unitsCls(x.units)}">${sgn(x.units,1)}</td></tr>`).join("") +
+    `</tbody></table></div>`;
+  h += `<h2>Most recent graded picks</h2><div class="panel tablewrap"><table id="t-bt"></table></div>`;
   $("#c-body").innerHTML = h;
-  if (b.bets.length) table($("#t-bt"), [
-    {k:"week",h:"Wk",n:1,v:r=>r.week},
+  table($("#t-bt"), [
+    {k:"date",h:"Date",v:r=>r.date,f:r=>new Date(r.date+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"2-digit"})},
     {k:"game",h:"Game",v:r=>r.game},
-    {k:"bet",h:"Bet",v:r=>r.market==="spread"?`${r.side} ${line(r.point)}`:`${r.side} ${r.point}`},
-    {k:"price",h:"Price",n:1,v:r=>r.price,f:r=>price(r.price)},
-    {k:"book",h:"Book",v:r=>r.book},
-    {k:"ev",h:"EV",n:1,v:r=>r.ev,f:r=>sgn(r.ev*100)+"%"},
-    {k:"res",h:"Result",v:r=>r.result,f:r=>`<span class="${r.result==="W"?"pos":r.result==="L"?"neg":""}">${r.result}</span>`},
-  ], b.bets, "week");
+    {k:"bet",h:"Pick",v:r=>r.label,f:r=>`<b>${esc(r.label)}</b> ${price(r.price)}`},
+    {k:"res",h:"Result",v:r=>r.result,f:r=>`<span class="${r.result==="W"?"pos":r.result==="L"?"neg":""}"><b>${r.result==="W"?"Won":r.result==="L"?"Lost":"Push"}</b></span>`},
+    {k:"profit",h:"Units",n:1,v:r=>r.profit,f:r=>`<span class="${unitsCls(r.profit)}">${sgn(r.profit,2)}</span>`},
+  ], b.bets.slice(0,150), "date");
 })();
 
 // ---------- by day, all sports
@@ -1074,11 +1078,12 @@ function renderHome(){
     : `<div class="panel"><div class="empty">No key players out in these games.</div></div>`);
 
   // 5. track record
-  h += `<h2>Track record</h2><div class="rec">` + ALL.order.map(k => {
+  h += `<h2>Track record <span class="small" style="font-family:var(--body);font-weight:400">past Picks against the real closing odds, 1 unit each</span></h2><div class="rec">` + ALL.order.map(k => {
     const b = ALL.leagues[k].backtest, n = b.bet_w + b.bet_l;
     return `<div class="tile"><div class="l">${esc(ALL.leagues[k].league)}</div>` + (n
-      ? `<div class="v">${b.bet_w}-${b.bet_l}${b.bet_p?`-${b.bet_p}`:""}</div><div class="s">${sgn(b.units,1)} units · ${pct(b.hit,0)} win rate${b.chalk && b.chalk.n ? ` · ${price(ALL.leagues[k].cfg.target_price)} range ${b.chalk.w}-${b.chalk.n-b.chalk.w}` : ""}</div>`
-      : `<div class="v" style="font-size:16px">Building</div><div class="s">Picks get graded once the app has saved DraftKings lines before games. Check back in a week or two.</div>`) + `</div>`;
+      ? `<div class="v">${b.bet_w}-${b.bet_l}${b.bet_p?`-${b.bet_p}`:""}</div><div class="s"><span class="${b.units>0?"pos":b.units<0?"neg":""}">${sgn(b.units,1)} units</span> · ${pct(b.hit,0)} win rate</div>` +
+        `<div class="s">${(b.seasons||[]).filter(x=>x.bet_w+x.bet_l).map(x=>`${esc(x.label)}: ${x.bet_w}-${x.bet_l}, ${sgn(x.units,1)}u`).join(" · ")}</div>`
+      : `<div class="v" style="font-size:16px">Building</div><div class="s">Past picks get graded on the next update.</div>`) + `</div>`;
   }).join("") + `</div>`;
   $("#homeview").innerHTML = h;
 }
