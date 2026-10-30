@@ -680,6 +680,25 @@ function matchupHtml(g){
     ${row("Away / home", `${a.aw}-${a.al} away`, `${h.hw}-${h.hl} home`)}
   </div>`;
 }
+const MKT_OF = {home_ml:"moneyline", away_ml:"moneyline", home:"spread", away:"spread", over:"total", under:"total"};
+const SIDE_OF = {home_ml:"home", away_ml:"away", home:"home", away:"away", over:"over", under:"under"};
+function lineMove(g, k){
+  // where the line was when the site first flagged this bet, vs now
+  const pl = [...(g.plays||[]), ...(g.benched_plays||[])].find(p => p.market===MKT_OF[k] && p.side===SIDE_OF[k]);
+  if (!pl || pl.first_price == null || !pl.first_utc) return null;
+  const mk = MKT_OF[k];
+  let better = 0;
+  if (mk === "moneyline") better = (M_implied(pl.first_price) - M_implied(pl.price)) * -1;   // > 0: price got worse for a new bettor, we were early
+  else if (mk === "spread") better = pl.first_point - pl.point;
+  else better = pl.side === "over" ? pl.point - pl.first_point : pl.first_point - pl.point;
+  if (mk !== "moneyline" && better === 0) better = (M_implied(pl.price) - M_implied(pl.first_price));
+  const was = mk === "moneyline" ? price(pl.first_price) : `${mk==="total"?"":(pl.first_point>0?"+":"")}${num(pl.first_point).replace(/\.0$/,"")} (${price(pl.first_price)})`;
+  const now = mk === "moneyline" ? price(pl.price) : `${mk==="total"?"":(pl.point>0?"+":"")}${num(pl.point).replace(/\.0$/,"")} (${price(pl.price)})`;
+  if (was === now) return {cls:"", txt:`Flagged ${when(pl.first_utc)} · line hasn't moved yet`};
+  return better > 0
+    ? {cls:"pos", txt:`Flagged at ${was}, now ${now}. The market moved toward this bet, a good sign.`}
+    : {cls:"neg", txt:`Flagged at ${was}, now ${now}. The line moved the other way. Still a play at the new number, but less of one.`};
+}
 function marketSuggestions(g){
   // the model's side in each market: moneyline, spread (puck line), total
   const out = [];
@@ -688,10 +707,12 @@ function marketSuggestions(g){
     if (!opts.length) continue;
     const k = opts.sort((a,b)=>(g.best[b].p_cover - M_implied(g.best[b].price)) - (g.best[a].p_cover - M_implied(g.best[a].price)))[0];
     const b = g.best[k], ed = b.p_cover - M_implied(b.price);
-    const isPick = b.ev >= D.cfg.min_ev && ed >= (D.cfg.min_edge ?? 0.03);
+    const mkt = MKT_OF[k], bench = (D.cfg.benched||[]).includes(mkt);
+    const strong = b.ev >= D.cfg.min_ev && ed >= (D.cfg.min_edge ?? 0.03);
+    const isPick = strong && !bench;
     const tier = isPick ? ["Pick","go"] : ed > 0.005 ? ["Lean",""] : ["Pass","pass"];
     const r = reasonsFor(g, k)[0];
-    out.push({label, k, b, ed, tier, r});
+    out.push({label, k, b, ed, tier, r, benchNote: strong && bench, move: lineMove(g, k)});
   }
   return out;
 }
@@ -701,7 +722,9 @@ function marketsHtml(g){
   return `<div class="mkts">` + ms.map(m => `<div class="mk">
       <div class="mk-l">${esc(m.label)}</div>
       <div class="mk-b"><b>${esc(pickLabel(g, m.k))}</b> <span class="pill ${m.tier[1]}">${m.tier[0]}</span>
-        <div class="small">${pct(m.b.p_cover,0)} to win · edge ${sgn(m.ed*100,0)}%${m.r ? " · " + esc(m.r) : ""}</div></div>
+        <div class="small">${pct(m.b.p_cover,0)} to win · edge ${sgn(m.ed*100,0)}%${m.r ? " · " + esc(m.r) : ""}</div>
+        ${m.benchNote ? `<div class="small">Would be a Pick, but ${m.label.toLowerCase()} bets are on the bench until they beat the closing line. See Model check.</div>` : ""}
+        ${m.move ? `<div class="small ${m.move.cls}">${esc(m.move.txt)}</div>` : ""}</div>
     </div>`).join("") + `</div>`;
 }
 function pointsHtml(g, k){
@@ -921,7 +944,24 @@ if (P.length) drawPlayers(); else $("#t-players").innerHTML = `<tr><td class="em
   const b = D.backtest;
   const rec = x => `${x.bet_w}-${x.bet_l}${x.bet_p?`-${x.bet_p}`:""}`;
   const unitsCls = u => u > 0 ? "pos" : u < 0 ? "neg" : "";
-  let h = `<p class="small">Every past game was predicted using only the games played before it, then the Picks were graded against the closing betting line ESPN had for that game. Each bet risks 1 unit. Past injury reports aren't kept, so these picks were made without injuries.</p>`;
+  const C = D.clv, ml0 = {moneyline:"Moneyline", spread: D.key==="nhl"?"Puck line":"Spread", total:"Total"};
+  const stPill = x => x.state === "benched" ? `<span class="pill pass">Bench: Lean only</span>` : `<span class="pill go">Picks on</span>`;
+  let h = `<h2>Beat the closing line <span class="small" style="font-family:var(--body);font-weight:400">live picks, from the day tracking started</span></h2>
+  <p class="small">Each flagged bet is saved at the number it was first shown. When the game starts, that number is compared to DraftKings' final line. Getting a better number than the close, again and again, is the quickest real sign of an edge. A bet type needs ${C.min_n} tracked bets before it's judged. Value is how much better the number you got was than the closing number (the same number = 0%). Totals start on the bench and come back if they average +1% or better; other bet types get benched if they average below −0.5%.</p>
+  <div class="panel tablewrap"><table><thead><tr><th>Bet</th><th>Status</th><th class="n">Beat the close</th><th class="n">Avg value</th><th class="n">Record</th><th class="n">Units</th></tr></thead><tbody>` +
+    Object.entries(C.status).map(([k,x]) => `<tr><td><b>${ml0[k]}</b></td><td>${stPill(x)}${x.proven?"":` <span class="small">testing ${x.n}/${C.min_n}</span>`}</td><td class="n">${x.n?`${x.beat} (${pct(x.beat/x.n,0)})`:"–"}</td><td class="n ${x.avg>0?"pos":x.avg<0?"neg":""}">${x.avg==null?"–":sgn(x.avg*100,1)+"%"}</td><td class="n">${x.w+x.l?`${x.w}-${x.l}`:"–"}</td><td class="n ${x.units>0?"pos":x.units<0?"neg":""}">${x.w+x.l?sgn(x.units,1):"–"}</td></tr>`).join("") +
+    `</tbody></table></div>`;
+  const tr = (C.recent||[]).filter(r => r.clv != null);
+  if (tr.length){
+    h += `<h2>Recent tracked bets</h2><div class="panel tablewrap"><table><thead><tr><th>Game</th><th>Bet</th><th class="n">Took</th><th class="n">Closed</th><th class="n">Value</th><th class="n">Result</th></tr></thead><tbody>` +
+      tr.slice(0,40).map(r => `<tr><td>${esc(r.game)}</td><td><b>${esc(r.label)}</b>${r.tier==="Lean"?` <span class="small">(bench)</span>`:""}</td>` +
+        `<td class="n">${r.market==="moneyline"?"":num(r.first_point).replace(/\.0$/,"")+" "}${price(r.first_price)}</td>` +
+        `<td class="n">${r.market==="moneyline"?"":num(r.close_point).replace(/\.0$/,"")+" "}${price(r.close_price)}</td>` +
+        `<td class="n ${r.clv>0?"pos":"neg"}">${sgn(r.clv*100,1)}%</td>` +
+        `<td class="n ${r.result==="W"?"pos":r.result==="L"?"neg":""}">${r.result==="W"?"Won":r.result==="L"?"Lost":r.result==="P"?"Push":"–"}</td></tr>`).join("") +
+      `</tbody></table></div>`;
+  } else h += `<div class="panel"><div class="empty">Tracking started today. Bets show up here once their games start.</div></div>`;
+  h += `<h2>Two season replay</h2><p class="small">Every past game was predicted using only the games played before it, then the Picks were graded against the closing betting line ESPN had for that game. Each bet risks 1 unit. Past injury reports aren't kept, so these picks were made without injuries.</p>`;
   const n = b.bet_w + b.bet_l;
   if (!n){
     $("#c-body").innerHTML = h + `<div class="panel"><div class="empty">No past lines yet. They fill in on the next update.</div></div>`;
@@ -1078,12 +1118,16 @@ function renderHome(){
     : `<div class="panel"><div class="empty">No key players out in these games.</div></div>`);
 
   // 5. track record
+  const clvLine = L => {
+    const xs = Object.values((L.clv||{}).status||{}), n = xs.reduce((a,x)=>a+x.n,0), beat = xs.reduce((a,x)=>a+x.beat,0);
+    return n ? `<div class="s">Live: beat the closing line on ${beat} of ${n} bets</div>` : `<div class="s">Live closing line tracking: starting now</div>`;
+  };
   h += `<h2>Track record <span class="small" style="font-family:var(--body);font-weight:400">past Picks against the real closing odds, 1 unit each</span></h2><div class="rec">` + ALL.order.map(k => {
     const b = ALL.leagues[k].backtest, n = b.bet_w + b.bet_l;
     return `<div class="tile"><div class="l">${esc(ALL.leagues[k].league)}</div>` + (n
       ? `<div class="v">${b.bet_w}-${b.bet_l}${b.bet_p?`-${b.bet_p}`:""}</div><div class="s"><span class="${b.units>0?"pos":b.units<0?"neg":""}">${sgn(b.units,1)} units</span> · ${pct(b.hit,0)} win rate</div>` +
         `<div class="s">${(b.seasons||[]).filter(x=>x.bet_w+x.bet_l).map(x=>`${esc(x.label)}: ${x.bet_w}-${x.bet_l}, ${sgn(x.units,1)}u`).join(" · ")}</div>`
-      : `<div class="v" style="font-size:16px">Building</div><div class="s">Past picks get graded on the next update.</div>`) + `</div>`;
+      : `<div class="v" style="font-size:16px">Building</div><div class="s">Past picks get graded on the next update.</div>`) + clvLine(ALL.leagues[k]) + `</div>`;
   }).join("") + `</div>`;
   $("#homeview").innerHTML = h;
 }

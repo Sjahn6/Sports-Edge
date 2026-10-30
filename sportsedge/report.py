@@ -5,6 +5,7 @@ from pathlib import Path
 from . import backtest as BT
 from . import board as B
 from . import calibration as CAL
+from . import clv as CLV
 from . import db as D
 from . import model as M
 from .leagues import season_for
@@ -21,7 +22,20 @@ def build_data(con, league, cfg, tz):
     preds = CAL.walk_forward(games, league, {season - 1, season}, cfg)
     calib = CAL.run(games, league, season, cfg, preds)
     cfg = dict(cfg, win_sd=calib["win_sd"], slope=calib["slope"])
+    now_iso = now.isoformat(timespec="seconds")
+    CLV.grade(con, league, now_iso)
+    clv = CLV.status(con, league)
     board = B.build_board(con, league, cfg, ratings, now, season=season)
+    cfg = dict(cfg, benched=CLV.bench(board, clv))
+    CLV.record(con, league, board, now_iso)
+    first = {(r["game_id"], r["market"], r["side"]): r for r in B.rows(
+        con, "SELECT game_id, market, side, first_point, first_price, first_utc FROM tracked WHERE league=?",
+        (league.key,))}
+    for g in board:
+        for pl in g["plays"] + g["benched_plays"]:
+            f = first.get((g["id"], pl["market"], pl["side"]))
+            if f:
+                pl["first_point"], pl["first_price"], pl["first_utc"] = f["first_point"], f["first_price"], f["first_utc"]
     inj_rows = B.rows(con, "SELECT team, player, position, status, detail, comment, date FROM injuries "
                            "WHERE league=? ORDER BY team, player", (league.key,))
     impact = {}
@@ -53,6 +67,7 @@ def build_data(con, league, cfg, tz):
         "injuries": inj_rows, "injuries_pulled": D.get_meta(con, f"{league.key}:injuries_pulled"),
         "calibration": calib,
         "board": board, "teams": teams, "players": players, "backtest": bt,
+        "clv": {"status": clv, "recent": CLV.recent(con, league), "min_n": CLV.MIN_N},
     }
 
 
