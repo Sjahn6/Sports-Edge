@@ -1313,8 +1313,8 @@ function paintLive(){
 }
 async function pullLive(){
   const now = Date.now();
-  // only leagues with a game that started in the last 6 hours (or just finished)
-  const want = ALL.order.filter(k => ALL.leagues[k].board.some(g => { const t = Date.parse(g.kickoff); return t <= now + 60e3 && t > now - 6*3600e3; }));
+  // only leagues with a game that started in the last 14 hours (finals stay up until the morning update)
+  const want = ALL.order.filter(k => ALL.leagues[k].board.some(g => { const t = Date.parse(g.kickoff); return t <= now + 60e3 && t > now - 14*3600e3; }));
   let anyLive = false;
   await Promise.all(want.map(async k => {
     try {
