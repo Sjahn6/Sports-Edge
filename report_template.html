@@ -163,6 +163,16 @@ th{text-transform:none;letter-spacing:0;font-size:12.5px}
 .wb span{padding:0 10px}
 .pick{border-radius:10px;background:var(--accent-soft);border-left:4px solid var(--accent)}
 .pick.none{border-left-color:var(--line)}
+.pick.lean{background:var(--chip);border-left-color:#8aa0b6}
+.whyline{font-size:14px;line-height:1.45;margin:8px 0 2px}
+.mk-h{font-size:13px;font-weight:600;color:var(--muted);margin-top:12px}
+.mkts{margin-top:4px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.mk{display:grid;grid-template-columns:86px 1fr;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);align-items:start}
+.mk:last-child{border-bottom:0}
+.mk-l{font-size:13px;font-weight:600;color:var(--muted);padding-top:2px}
+.mk-b b{font-size:15px}
+.pill.pass{background:transparent;border:1px solid var(--line);color:var(--muted)}
+.pick.lean .pk-top b{font-size:21px;color:var(--ink)}
 .pk-top b{font-family:var(--display);font-size:24px;font-weight:800;letter-spacing:.01em;line-height:1.05}
 .pk-sub b{color:var(--ink)}
 .lg{font-family:var(--display);font-size:13px;font-weight:800;letter-spacing:.03em;padding:2px 7px;background:var(--lc,var(--ink));color:#fff;border-radius:5px}
@@ -316,7 +326,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pct = (x,d=1) => x==null ? "–" : (x*100).toFixed(d)+"%";
 const num = (x,d=1) => x==null ? "–" : (+x).toFixed(d);
-const sgn = (x,d=1) => x==null ? "–" : (x>0?"+":"")+(+x).toFixed(d);
+const sgn = (x,d=1) => { if (x==null) return "–"; const t = (+x).toFixed(d); return /^-?0(\.0+)?$/.test(t) ? t.replace("-","") : (x>0?"+":"")+t; };
 const line = p => p==null ? "–" : p==0 ? "PK" : (p>0?"+":"")+(+p).toFixed(1).replace(/\.0$/,"");
 const price = p => p==null ? "–" : (p>0?"+":"")+p;
 const tz = D.tz || undefined;
@@ -341,7 +351,7 @@ $("#lsw").innerHTML = `<button style="--c:#2d5d8f" class="${HOMEMODE?"on":""}" o
   const today = L.board.filter(g => new Date(g.kickoff).toLocaleDateString("en-US",{timeZone:ALL.tz}) === day).length;
   const games = L.key === "nfl" ? `${L.board.length} games this week` : today ? `${today} games today` : `${L.board.length} games this week`;
   const plays = n ? `<i class="dot"></i>${n} at ${price(L.cfg.target_price)}` : `none at ${price(L.cfg.target_price)}`;
-  return `<button style="--c:${SPORTC[k]}" class="${!DAYMODE && !HOMEMODE && k===CUR?"on":""}" onclick="location.hash='${k}/'+(location.hash.split('/')[1]||'chalk');location.reload()"><b>${esc(L.league)}</b><span>${plays} · ${games}</span></button>`;
+  return `<button style="--c:${SPORTC[k]}" class="${!DAYMODE && !HOMEMODE && k===CUR?"on":""}" onclick="location.hash='${k}/'+(location.hash.split('/')[1]||'chalk');location.reload()"><b>${esc(L.league)}</b><span>${games}</span></button>`;
 }).join("");
 { const t = location.hash.split("/")[1]; if (t && document.getElementById(t)) showTab(t); }
 
@@ -474,6 +484,16 @@ function pickFor(g){
   const key = band.sort((a,b)=>g.best[b].ev-g.best[a].ev)[0] || all[0];
   return key ? {key, b: g.best[key], others: all.filter(k=>k!==key)} : null;
 }
+function leanFor(g){
+  // no pick: the bet the model likes most against its price (biggest win-chance edge).
+  // Moneylines in your price range win ties, since that's how you like to bet.
+  const keys = ["home_ml","away_ml","home","away","over","under"].filter(k => g.best[k]);
+  if (!keys.length) return null;
+  const score = k => (g.best[k].p_cover - M_implied(g.best[k].price))
+    + (k.endsWith("_ml") && g.best[k].price <= D.cfg.band_high && g.best[k].price >= D.cfg.band_low ? 0.01 : 0);
+  const key = keys.sort((a,b)=>score(b)-score(a))[0];
+  return {key, b: g.best[key]};
+}
 function pickLabel(g, k){
   const b = g.best[k];
   if (k.endsWith("_ml")) return `${abbr(g,k.slice(0,-3))} to win ${price(b.price)}`;
@@ -554,6 +574,90 @@ function playPoints(g, k){
   if (warn) out.push(["Heads up", "big gap vs DraftKings, check news first"]);
   return out;
 }
+function reasonsFor(g, k){
+  // the plain-English reasons behind a bet, strongest first
+  const f = g.why.factors, side = k.endsWith("_ml") ? k.slice(0,-3) : k;
+  const H = "the " + abbr(g,"home"), A = "the " + abbr(g,"away");
+  const small = D.margin_sd * 0.03;
+  if (side === "over" || side === "under"){
+    const sg = side === "over" ? 1 : -1;
+    return [
+      [f.home_off*sg, f.home_off > 0 ? `${H} score more than most teams` : `${H} don't score much`],
+      [f.away_off*sg, f.away_off > 0 ? `${A} score more than most teams` : `${A} don't score much`],
+      [f.home_def*sg, f.home_def > 0 ? `${H} give up a lot` : `${H} defend well`],
+      [f.away_def*sg, f.away_def > 0 ? `${A} give up a lot` : `${A} defend well`],
+      [(g.inj_total||0)*sg, side==="over" ? "injured defenders should help scoring" : "injured scorers should hold it down"],
+    ].filter(x => x[0] >= small).sort((a,b)=>b[0]-a[0]).map(x=>x[1]);
+  }
+  const me = side, opp = side==="home" ? "away" : "home", T = "the " + abbr(g,me), O = "the " + abbr(g,opp), s1 = side==="home" ? 1 : -1;
+  let topInj = null;
+  if (g.injuries) for (const p of g.injuries[opp]) if (!topInj || p.pts > topInj.pts) topInj = p;
+  const fo = side==="home" ? f.home_form : f.away_form;
+  return [
+    [(f.home_rating - f.away_rating) * s1, `${T} have been the better team this season`],
+    [g.neutral ? 0 : f.hfa * s1, `${T} are at home`],
+    [(g.inj_margin||0) * s1, topInj && topInj.pts > 0 ? `${O} are without ${topInj.player}` : `${O} have key injuries`],
+    [(g.rest_margin||0) * s1, `${O} played last night`],
+    [fo && fo.n >= 3 ? (fo.last3 - fo.season) * 0.25 : 0, `${T} have been playing well lately`],
+  ].filter(x => x[0] >= small).sort((a,b)=>b[0]-a[0]).map(x=>x[1]);
+}
+const cap = t => t ? t[0].toUpperCase() + t.slice(1) : t;
+function joinWhy(list){
+  // "the Falcons are better and the Falcons are at home" -> "...and they're at home"
+  if (list.length < 2) return list.join("");
+  const m = list[0].match(/^the [A-Z0-9][\w. ]*?(?= (are|have|score|don't|give|defend))/);
+  let second = list[1];
+  if (m && second.startsWith(m[0] + " ")) {
+    second = second.slice(m[0].length + 1).replace(/^are /, "they're ").replace(/^have /, "they've ")
+      .replace(/^(score|give|defend|don't)/, "they $1");
+  }
+  return list[0] + " and " + second;
+}
+function whyText(g, k, isPick){
+  // one plain-English answer to "why this bet?"
+  const b = g.best[k], side = k.endsWith("_ml") ? k.slice(0,-3) : k;
+  const u = U === "pts" ? "points" : "goals", n = x => num(Math.abs(x), U1);
+  const need = M_implied(b.price), ed = b.p_cover - need;
+  const why = reasonsFor(g, k).slice(0,2);
+  let lead;
+  if (side === "over" || side === "under"){
+    lead = `The model projects ${num(g.exp_total,U1)} total ${u}, ${side==="over"?"above":"below"} the ${b.point} line` + (why.length ? ` because ${joinWhy(why)}.` : ".");
+  } else {
+    const T = abbr(g,side), O = abbr(g, side==="home" ? "away" : "home"), tm = g.exp_margin * (side==="home" ? 1 : -1);
+    if (k.endsWith("_ml"))
+      lead = tm >= 0
+        ? `The model makes the ${T} the more likely winner` + (why.length ? ` because ${joinWhy(why)}.` : ".")
+        : `The ${O} are favored, but the model gives the ${T} a better shot than the price suggests` + (why.length ? `: ${joinWhy(why)}.` : ".");
+    else
+      lead = `The model has the ${tm >= 0 ? T : O} by ${n(tm)}, so ${T} ${line(b.point)} covers with about ${n(tm + b.point)} to spare.` + (why.length ? ` ${cap(joinWhy(why))}.` : "");
+  }
+  return `${lead} At ${b.price > 0 ? "+" : ""}${b.price} it needs to win ${pct(need,0)} of the time, and the model says ${pct(b.p_cover,0)}` +
+    (isPick ? `, so the price is in your favor.` : ed > 0.005 ? `, a small edge.` : `, so the price is about right.`);
+}
+function marketSuggestions(g){
+  // the model's side in each market: moneyline, spread (puck line), total
+  const out = [];
+  for (const [label, keys] of [["Moneyline", ["home_ml","away_ml"]], [D.key==="nhl" ? "Puck line" : "Spread", ["home","away"]], ["Total", ["over","under"]]]){
+    const opts = keys.filter(k => g.best[k]);
+    if (!opts.length) continue;
+    const k = opts.sort((a,b)=>(g.best[b].p_cover - M_implied(g.best[b].price)) - (g.best[a].p_cover - M_implied(g.best[a].price)))[0];
+    const b = g.best[k], ed = b.p_cover - M_implied(b.price);
+    const isPick = b.ev >= D.cfg.min_ev && ed >= (D.cfg.min_edge ?? 0.03);
+    const tier = isPick ? ["Pick","go"] : ed > 0.005 ? ["Lean",""] : ["Pass","pass"];
+    const r = reasonsFor(g, k)[0];
+    out.push({label, k, b, ed, tier, r});
+  }
+  return out;
+}
+function marketsHtml(g){
+  const ms = marketSuggestions(g);
+  if (!ms.length) return "";
+  return `<div class="mkts">` + ms.map(m => `<div class="mk">
+      <div class="mk-l">${esc(m.label)}</div>
+      <div class="mk-b"><b>${esc(pickLabel(g, m.k))}</b> <span class="pill ${m.tier[1]}">${m.tier[0]}</span>
+        <div class="small">${pct(m.b.p_cover,0)} to win · edge ${sgn(m.ed*100,0)}%${m.r ? " · " + esc(m.r) : ""}</div></div>
+    </div>`).join("") + `</div>`;
+}
 function pointsHtml(g, k){
   return `<div class="pts">` + playPoints(g,k).map(([l,t]) =>
     `<div class="pl${l==="Heads up"?" hu":""}">${esc(l)}</div><div>${esc(t)}</div>`).join("") + `</div>`;
@@ -572,16 +676,29 @@ function cardHtml(g){
     <div class="pick">
       <div class="pk-top"><span class="pk-tag">Pick</span><b>${esc(pickLabel(g,pk.key))}</b><span class="pill ${edgeLevel(g,pk.b).c}">${edgeLevel(g,pk.b).t}</span></div>
       <div class="pk-sub" title="Win chance = how often SportsEdge thinks it wins. Edge = how much higher that is than this price requires.">Win chance <b>${pct(pk.b.p_cover,0)}</b> · Edge <b class="pos">${sgn((pk.b.p_cover-M_implied(pk.b.price))*100,0)}%</b></div>
-      ${pointsHtml(g,pk.key)}
+      <div class="whyline"><b>Why:</b> ${esc(whyText(g,pk.key,true))}</div>
+      ${playPoints(g,pk.key).some(x=>x[0]==="Heads up") ? `<div class="whyline" style="color:var(--warn)"><b>Heads up:</b> big gap vs DraftKings. Check injuries and lineups before betting.</div>` : ""}
       ${pk.others.length ? `<div class="small">Also +EV: ${pk.others.map(k=>esc(pickLabel(g,k))).join(", ")}</div>` : ""}
     </div>`
-    : `<div class="pick none">${hasLines ? "No bet. Nothing here clears the bar." : "No DraftKings line saved yet."}</div>`;
+    : (() => {
+      const ln = hasLines ? leanFor(g) : null;
+      if (!ln) return `<div class="pick none">No DraftKings line saved yet.</div>`;
+      const ed = ln.b.p_cover - M_implied(ln.b.price);
+      const pts = playPoints(g, ln.key).filter(x => x[0] !== "Heads up");
+      return `<div class="pick lean">
+        <div class="pk-top"><b>${esc(pickLabel(g,ln.key))}</b><span class="pill">Lean</span></div>
+        <div class="pk-sub">Win chance <b>${pct(ln.b.p_cover,0)}</b> · Edge <b class="${ed>0?"pos":"neg"}">${sgn(ed*100,0)}%</b></div>
+        <div class="whyline"><b>Why:</b> ${esc(whyText(g,ln.key,false))}</div>
+        <div class="small">${ed > 0 ? "Small edge, below the bar for a pick. If you bet it, keep it small." : "The price is about right. No real edge, so this is the model's side, not a bet."}</div>
+      </div>`;
+    })();
   const jc = teamColors(g);
   return `<div class="card" id="card-${g.id}"><div class="jersey"><i style="background:${jc.away}"></i><i style="background:${jc.home}"></i></div>
     <div class="top"><div class="teams">${esc(abbr(g,"away"))} @ ${esc(abbr(g,"home"))}</div><div class="when" style="white-space:nowrap">${new Date(g.kickoff).toLocaleString("en-US",{timeZone:tz,weekday:"short",hour:"numeric",minute:"2-digit"})}</div></div>
     <div class="small">${esc(g.away)} at ${esc(g.home)}${flag?` <span class="pill warnp">${esc(flag)}</span>`:""}</div>
     ${winBar(g)}
     ${pickHtml}
+    ${hasLines ? `<div class="mk-h">Every bet on this game</div>${marketsHtml(g)}` : ""}
     <details class="more"><summary>Show details</summary>
     <div class="kv">
       <div class="h"></div><div class="h r">Model</div><div class="h r">DraftKings</div>
@@ -593,7 +710,7 @@ function cardHtml(g){
     </div>
     ${bh && ba ? `
       <div class="kv" style="margin-top:12px">
-        <div class="h">Every bet on this game</div><div class="h r">Win %</div><div class="h r">EV</div>
+        <div class="h">Both sides of every bet</div><div class="h r">Win %</div><div class="h r">EV</div>
         ${[["away_ml",g.best.away_ml],["home_ml",g.best.home_ml],["away",ba],["home",bh],["over",bo],["under",bu]].filter(x=>x[1]).map(([k,b])=>
           `<div>${esc(pickLabel(g,k))}</div><div class="r">${pct(b.p_cover)}</div><div class="r ${b.ev>0?"pos":""}">${sgn(b.ev*100)}%</div>`).join("")}
       </div>` : ""}
