@@ -232,6 +232,17 @@ button:focus-visible,.hp:focus-visible,.hero:focus-visible,summary:focus-visible
 th[data-tip]{cursor:help}
 .tipq{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:4px;border-radius:50%;
   font:700 10px/1 var(--body);background:rgba(127,127,127,.18);color:inherit;opacity:.75;vertical-align:1px;cursor:pointer}
+.live:empty{display:none}
+.live{margin:10px 0 4px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lv-h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;background:var(--chip)}
+.lv-st{font:700 12px/1 var(--body);letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.lv-st.on{color:var(--bad)} .lv-st.on::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--bad);margin-right:6px;vertical-align:1px;animation:lvp 1.4s infinite}
+@keyframes lvp{50%{opacity:.25}}
+.lv-sc{font:800 20px/1 var(--display);letter-spacing:.02em}
+.lv-rows{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;padding:8px 10px;font-size:13px;align-items:center}
+.lv-rows .k{color:var(--muted);font-size:12px}
+.lv-b{font-weight:700;font-size:12px;padding:2px 8px;border-radius:99px;background:var(--chip);white-space:nowrap}
+.lv-b.w{background:var(--accent-soft);color:var(--accent)} .lv-b.l{background:rgba(194,42,53,.12);color:var(--bad)}
 #tipbub{position:fixed;z-index:999;max-width:260px;padding:9px 11px;border-radius:9px;background:#0f1b2d;color:#f3f6fb;
   font:400 13px/1.4 var(--body);text-transform:none;letter-spacing:0;box-shadow:0 8px 24px rgba(0,0,0,.3);display:none;pointer-events:none;white-space:normal;text-align:left}
 </style>
@@ -495,9 +506,9 @@ function winBar(g){
   return `<div class="wb">${seg("away", pa)}${seg("home", g.p_home)}</div>`;
 }
 const KEYLABEL = {home_ml:"home", away_ml:"away"};
-function pickFor(g){
+function pickFor(g, keepStarted){
   // your style first: a moneyline favorite in the price range, then the best EV play
-  if (g.kickoff <= new Date().toISOString()) return null;   // started: no pick to bet
+  if (!keepStarted && g.kickoff <= new Date().toISOString()) return null;   // started: no new pick to bet
   const ok = k => g.best[k] && !(D.cfg.benched||[]).includes(MKT_OF[k]) && g.best[k].ev >= D.cfg.min_ev && (g.best[k].p_cover - M_implied(g.best[k].price)) >= (D.cfg.min_edge ?? 0.03);
   const band = ["home_ml","away_ml"].filter(k => ok(k) && g.best[k].price <= D.cfg.band_high && g.best[k].price >= D.cfg.band_low);
   const all = ["home_ml","away_ml","home","away","over","under"].filter(ok).sort((a,b)=>g.best[b].ev-g.best[a].ev);
@@ -745,7 +756,7 @@ function pointsHtml(g, k){
 function cardHtml(g){
   const bh=g.best.home, ba=g.best.away, bo=g.best.over, bu=g.best.under;
   const hasLines = g.market_spread!=null || g.moneylines.length;
-  const pk = hasLines ? pickFor(g) : null;
+  const pk = hasLines ? pickFor(g, true) : null;
   const flag = qbFlag(g);
   const books = g.spreads.map(s=>{
     const t = g.totals.find(t=>t.book===s.book);
@@ -775,6 +786,7 @@ function cardHtml(g){
   return `<div class="card" id="card-${g.id}"><div class="jersey"><i style="background:${jc.away}"></i><i style="background:${jc.home}"></i></div>
     <div class="top"><div class="teams">${esc(abbr(g,"away"))} @ ${esc(abbr(g,"home"))}</div><div class="when" style="white-space:nowrap">${new Date(g.kickoff).toLocaleString("en-US",{timeZone:tz,weekday:"short",hour:"numeric",minute:"2-digit"})}</div></div>
     <div class="small">${esc(g.away)} at ${esc(g.home)}${flag?` <span class="pill warnp">${esc(flag)}</span>`:""}</div>
+    <div class="live" data-live="${g.id}"></div>
     ${winBar(g)}
     ${matchupHtml(g)}
     ${pickHtml}
@@ -1045,7 +1057,7 @@ function renderHome(){
   const time = iso => new Date(iso).toLocaleTimeString("en-US",{timeZone:ALL.tz,hour:"numeric",minute:"2-digit"});
   const dayName = d => d === TODAY ? "Today" : t12(d).toLocaleDateString("en-US",{weekday:"long"});
   let h = `<div class="home-h"><h2>${new Date().toLocaleDateString("en-US",{timeZone:ALL.tz,weekday:"long",month:"long",day:"numeric"})}</h2>
-    <span class="small">Updated ${when(ALL.generated)} · DraftKings lines</span></div>`;
+    <span class="small">Updated ${when(ALL.generated)} · DraftKings lines</span></div><div id="livenow"></div>`;
   if (!focus){ $("#homeview").innerHTML = h + `<div class="empty">No games in the next 8 days.</div>`; return; }
 
   // every pick, all sports, next 8 days
@@ -1239,6 +1251,99 @@ document.addEventListener("click", e => {
 window.addEventListener("scroll", () => { if (Date.now() - bubAt > 400) hideTip(); }, true);
 tipify(document);
 new MutationObserver(() => tipify(document)).observe(document.body, {childList:true, subtree:true});
+
+// ---------- live scores: straight from ESPN in your browser every 30 seconds while games are on
+const LIVE_PATH = {nfl:"football/nfl", nba:"basketball/nba", nhl:"hockey/nhl"};
+const REG = {nfl:[4,15], nba:[4,12], nhl:[3,20]};   // periods, minutes each
+const LIVE = {};   // game id -> {state, detail, home, away, period, clock}
+function liveTrack(g, k, L){
+  // how each of the model's sides (spread, moneyline, total) is doing right now
+  const rows = [];
+  const hm = L.home - L.away, fin = L.state === "post";
+  const [np, plen] = REG[k];
+  let frac = 1;
+  if (L.state === "in"){
+    const c = String(L.clock||"0").split(":"), left = c.length > 1 ? +c[0] + c[1]/60 : +c[0]/60;
+    frac = L.period > np ? 1 : Math.min(1, Math.max(0.02, ((L.period-1)*plen + (plen - left)) / (np*plen)));
+  }
+  const badge = (txt, st) => `<span class="lv-b ${st||""}">${esc(txt)}</span>`;
+  for (const m of marketSuggestions(g)){
+    const kk = m.k, b = m.b, tierPill = `<span class="pill ${m.tier[1]}" style="font-size:10px">${m.tier[0]}</span>`;
+    let txt, st;
+    if (kk.endsWith("_ml")){
+      const my = kk === "home_ml" ? hm : -hm;
+      if (fin){ txt = my > 0 ? "Won" : my < 0 ? "Lost" : "Tie"; st = my > 0 ? "w" : my < 0 ? "l" : ""; }
+      else { txt = my > 0 ? `Winning by ${my}` : my < 0 ? `Down ${-my}` : "Tied"; st = my > 0 ? "w" : my < 0 ? "l" : ""; }
+    } else if (kk === "home" || kk === "away"){
+      const my = (kk === "home" ? hm : -hm) + b.point;
+      if (fin){ txt = my > 0 ? "Covered" : my < 0 ? "Didn't cover" : "Push"; }
+      else txt = my > 0 ? `Covering by ${num(my).replace(/\.0$/,"")}` : my < 0 ? `Needs ${num(-my).replace(/\.0$/,"")} more` : "On the number";
+      st = my > 0 ? "w" : my < 0 ? "l" : "";
+    } else {
+      const tot = L.home + L.away, over = kk === "over", diff = tot - b.point;
+      const pace = frac < 1 ? ` · pace ${Math.round(tot/frac)}` : "";
+      if (fin){ const ok = over ? diff > 0 : diff < 0; txt = diff === 0 ? "Push" : ok ? "Won" : "Lost"; st = diff === 0 ? "" : ok ? "w" : "l"; }
+      else if (over){ txt = diff > 0 ? "Already over" : `${num(-diff + (Number.isInteger(b.point)?1:0.5)).replace(/\.0$/,"")} more to go${pace}`; st = diff > 0 ? "w" : (frac < 1 && tot/frac > b.point ? "w" : "l"); }
+      else { txt = diff > 0 ? "Went over" : `${num(-diff).replace(/\.0$/,"")} under the line${pace}`; st = diff > 0 ? "l" : (frac < 1 && tot/frac > b.point ? "l" : "w"); }
+    }
+    rows.push(`<div class="k">${esc(m.label)}</div><div><b>${esc(pickLabel(g, kk))}</b> ${tierPill}</div>${badge(txt, st)}`);
+  }
+  return rows.join("");
+}
+function liveHtml(g, k){
+  const L = LIVE[g.id]; if (!L || L.state === "pre") return "";
+  const on = L.state === "in";
+  return `<div class="lv-h"><span class="lv-st ${on?"on":""}">${on ? esc(L.detail) : "Final" + (/OT|SO/.test(L.detail) ? " (" + esc(L.detail.replace(/^Final\/?\s*/,"")) + ")" : "")}</span>
+      <span class="lv-sc">${esc(abbr(g,"away"))} ${L.away} · ${esc(abbr(g,"home"))} ${L.home}</span></div>
+    <div class="lv-rows">${liveTrack(g, k, L)}</div>`;
+}
+function paintLive(){
+  const save = D.key;
+  document.querySelectorAll("[data-live]").forEach(el => {
+    const x = GAME[el.dataset.live]; if (!x) return;
+    useLeague(x.k); el.innerHTML = liveHtml(x.g, x.k);
+  });
+  const ln = document.getElementById("livenow");
+  if (ln){
+    const on = allGames.filter(x => LIVE[x.g.id] && LIVE[x.g.id].state === "in");
+    ln.innerHTML = on.length ? `<h2>Live now <span class="small" style="font-family:var(--body);font-weight:400">how each bet on the game is doing · updates every 30 seconds</span></h2><div class="grid">` +
+      on.map(x => { useLeague(x.k); return `<div class="panel" style="padding:4px 8px;border-top:3px solid ${SPORTC[x.k]}"><div class="live">${liveHtml(x.g, x.k)}</div></div>`; }).join("") + `</div>` : "";
+  }
+  useLeague(save);
+}
+async function pullLive(){
+  const now = Date.now();
+  // only leagues with a game that started in the last 6 hours (or just finished)
+  const want = ALL.order.filter(k => ALL.leagues[k].board.some(g => { const t = Date.parse(g.kickoff); return t <= now + 60e3 && t > now - 6*3600e3; }));
+  let anyLive = false;
+  await Promise.all(want.map(async k => {
+    try {
+      const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${LIVE_PATH[k]}/scoreboard`, {cache:"no-store"});
+      const d = await r.json();
+      for (const ev of d.events || []){
+        const c = ev.competitions && ev.competitions[0]; if (!c) continue;
+        const h = c.competitors.find(t => t.homeAway === "home"), a = c.competitors.find(t => t.homeAway === "away");
+        const st = ev.status || c.status || {};
+        LIVE[ev.id] = {state: st.type && st.type.state, detail: (st.type && (st.type.shortDetail || st.type.detail)) || "",
+                       period: st.period || 0, clock: st.displayClock || "0:00", home: +h.score || 0, away: +a.score || 0};
+        if (LIVE[ev.id].state === "in") anyLive = true;
+      }
+    } catch(e){ /* ESPN unreachable: just skip live scores */ }
+  }));
+  paintLive();
+  return anyLive || want.some(k => ALL.leagues[k].board.some(g => { const t = Date.parse(g.kickoff); return t > now - 5*60e3 && t < now + 30*60e3; }));
+}
+(function liveLoop(){
+  let timer = null;
+  const tick = async () => {
+    if (document.hidden) return;
+    const keep = await pullLive();
+    clearTimeout(timer);
+    timer = setTimeout(tick, keep ? 30000 : 300000);   // every 30s while games are on, else check every 5 min
+  };
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+  tick();
+})();
 </script>
 </body>
 </html>
