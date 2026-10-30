@@ -618,32 +618,33 @@ function joinWhy(list){
   return list[0] + " and " + second;
 }
 function whyText(g, k, isPick){
-  // one plain-English answer to "why this bet?"
+  // three short plain sentences: what should happen, why, and whether the price is good
   const b = g.best[k], side = k.endsWith("_ml") ? k.slice(0,-3) : k;
-  const u = U === "pts" ? "points" : "goals", n = x => num(Math.abs(x), U1);
-  const need = M_implied(b.price), ed = b.p_cover - need;
+  const ed = b.p_cover - M_implied(b.price);
   const why = reasonsFor(g, k).slice(0,2);
-  let lead;
+  let call;
   if (side === "over" || side === "under"){
     const gap = side === "over" ? g.exp_total - b.point : b.point - g.exp_total;
-    lead = gap > 0.05
-      ? `The model projects ${num(g.exp_total,U1)} total ${u}, ${side==="over"?"above":"below"} the ${b.point} line` + (why.length ? ` because ${joinWhy(why)}.` : ".")
-      : (D.model === "poisson" && side === "under")
-        ? `The model projects ${num(g.exp_total,U1)} total ${u} on average, but hockey scores bunch at the low end, so ${Math.floor(b.point)} or fewer still happens about ${pct(b.p_cover,0)} of the time` + (why.length ? `. ${cap(joinWhy(why))}.` : ".")
-        : `The model projects ${num(g.exp_total,U1)} total ${u}, right around the ${b.point} line` + (why.length ? `, and ${joinWhy(why)}.` : ".");
+    const about = U === "pts" && gap > 0.5 ? ` (about ${Math.round(g.exp_total)} points)` : "";
+    call = side === "over" ? `Expect a higher-scoring game${about}` : `Expect a lower-scoring game${about}`;
   } else {
-    const T = abbr(g,side), O = abbr(g, side==="home" ? "away" : "home"), tm = g.exp_margin * (side==="home" ? 1 : -1);
-    if (k.endsWith("_ml"))
-      lead = tm >= 0
-        ? `The model makes the ${T} the more likely winner` + (why.length ? ` because ${joinWhy(why)}.` : ".")
-        : ed > 0.005
-          ? `The ${O} are favored, but the model gives the ${T} a better shot than the price suggests` + (why.length ? `: ${joinWhy(why)}.` : ".")
-          : `The ${O} are favored and the model mostly agrees. The ${T} are just the side it likes a little more at this price` + (why.length ? `, since ${joinWhy(why)}.` : ".");
-    else
-      lead = `The model has the ${tm >= 0 ? T : O} by ${n(tm)}, so ${T} ${line(b.point)} covers with about ${n(tm + b.point)} to spare.` + (why.length ? ` ${cap(joinWhy(why))}.` : "");
+    const T = abbr(g, side), O = abbr(g, side === "home" ? "away" : "home");
+    if (k.endsWith("_ml")) {
+      call = b.p_win >= 0.62 ? `The ${T} should win`
+           : b.p_win >= 0.5 ? `Close game, but the ${T} have the edge`
+           : `The ${O} are favored, but the ${T} have a real shot`;
+    } else if (b.point < 0) {
+      call = `The ${T} should win by more than ${Math.abs(b.point)}`;
+    } else {
+      call = D.model === "poisson"
+        ? `The ${T} should win or lose by just one goal`
+        : `The ${T} should win or lose by less than ${b.point}`;
+    }
   }
-  return `${lead} At ${b.price > 0 ? "+" : ""}${b.price} it needs to win ${pct(need,0)} of the time, and the model says ${pct(b.p_cover,0)}` +
-    (isPick ? `, so the price is in your favor.` : ed > 0.005 ? `, a small edge.` : `, so the price is about right.`);
+  const value = isPick ? "The odds give you a good price on this."
+    : ed > 0.005 ? "The odds are only slightly in your favor, so keep it small."
+    : "The odds are fair, so there's no real edge here.";
+  return `${call}. ${why.length ? cap(joinWhy(why)) + ". " : ""}${value}`;
 }
 function marketSuggestions(g){
   // the model's side in each market: moneyline, spread (puck line), total
