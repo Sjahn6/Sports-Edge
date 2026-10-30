@@ -160,8 +160,10 @@ def update_games(con, league, seasons_back=1, fetch_players=True, full=False, es
             log(f"  pulling {len(todo)} box scores (first run takes a few minutes)")
         for i, g in enumerate(todo, 1):
             try:
-                team_rows, player_rows = espn.fetch_summary(league, g["id"])
+                full = dict(con.execute("SELECT * FROM games WHERE id=?", (g["id"],)).fetchone())
+                team_rows, player_rows, odds_rows, _ = espn.fetch_summary_full(league, full)
                 D.save_box(con, g["id"], league.key, team_rows, player_rows)
+                _save_closing(con, full, odds_rows)
             except Exception as e:
                 log(f"  ! box score {g['away_abbr']} @ {g['home_abbr']} ({g['id']}): {e}")
             if i % 25 == 0:
@@ -169,6 +171,62 @@ def update_games(con, league, seasons_back=1, fetch_players=True, full=False, es
                 log(f"    {i}/{len(todo)}")
             time.sleep(0.2)
         con.commit()
+
+
+def _save_closing(con, g, rows):
+    """Store a finished game's closing line, stamped two minutes before kickoff."""
+    if not rows:
+        return False
+    if con.execute("SELECT 1 FROM odds WHERE game_id=? AND fetched_utc < ? LIMIT 1",
+                   (g["id"], g["date_utc"])).fetchone():
+        return True
+    stamp = (parse_iso(g["date_utc"]) - timedelta(minutes=2)).isoformat(timespec="seconds")
+    for r in rows:
+        r["fetched_utc"] = stamp
+    D.save_odds(con, rows)
+    return True
+
+
+def backfill_from_summaries(con, league, seasons_back=1, budget_s=420):
+    """Closing lines for past games from each game's summary page. Resumable: works
+    through the oldest gaps first for up to budget_s seconds per run, and remembers
+    games ESPN has no line for so it doesn't ask again."""
+    import json
+    import time as _t
+    now = now_utc()
+    season = season_for(league.key, now)
+    tried = set(json.loads(D.get_meta(con, f"{league.key}:closing_none", "[]")))
+    todo = [dict(r) for r in con.execute(
+        "SELECT * FROM games g WHERE league=? AND completed=1 AND season>=? AND season_type IN (2,3) "
+        "AND NOT EXISTS (SELECT 1 FROM odds o WHERE o.game_id=g.id AND o.fetched_utc < g.date_utc) "
+        "ORDER BY date_utc DESC", (league.key, season - seasons_back))]
+    todo = [g for g in todo if g["id"] not in tried]
+    if not todo:
+        return
+    t0, got, none, sample = _t.time(), 0, 0, None
+    for i, g in enumerate(todo, 1):
+        if _t.time() - t0 > budget_s:
+            break
+        try:
+            _, _, rows, keys = espn.fetch_summary_full(league, g)
+        except Exception as e:
+            log(f"  ! summary {g['id']}: {e}")
+            continue
+        sample = sample or keys
+        if _save_closing(con, g, rows):
+            got += 1
+        else:
+            none += 1
+            tried.add(g["id"])
+        if i % 50 == 0:
+            D.set_meta(con, f"{league.key}:closing_none", json.dumps(sorted(tried)))
+            con.commit()
+        _t.sleep(0.05)
+    D.set_meta(con, f"{league.key}:closing_none", json.dumps(sorted(tried)))
+    D.set_meta(con, f"{league.key}:closing_diag", json.dumps({"got": got, "none": none, "left": len(todo) - got - none,
+                                                             "keys": sample}))
+    con.commit()
+    log(f"  {league.name} past lines: {got} filled in, {none} with no line, {len(todo) - got - none} left for next run")
 
 
 def backfill_closing_lines(con, league, seasons_back=1):

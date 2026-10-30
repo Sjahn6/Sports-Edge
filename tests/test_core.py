@@ -105,6 +105,8 @@ def build_world():
                 evs.append(ev_)
                 if done:
                     summaries[str(gid)] = fake_summary(h, a, hs, as_)
+                    if "odds" in ev_["competitions"][0]:
+                        summaries[str(gid)]["pickcenter"] = ev_["competitions"][0]["odds"]
             weeks[(s, 2, w)] = {"events": evs}
     return now, season, weeks, summaries
 

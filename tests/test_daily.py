@@ -128,6 +128,8 @@ class World:
         self.events.append(ev)
         if done:
             self.summaries[gid] = self.summary(h, a, hs, as_)
+            self.summaries[gid]["pickcenter"] = ev["competitions"][0]["odds"]
+            del ev["competitions"][0]["odds"]   # like ESPN: finished games lose the scoreboard line
 
     def espn_odds(self, h, a):
         if self.key == "nba":
@@ -245,6 +247,7 @@ def run_league(key, seed, save_to=None):
     lines = con.execute("SELECT COUNT(DISTINCT game_id) FROM odds").fetchone()[0]
     assert lines == up, (lines, up)
     PL.backfill_closing_lines(con, lg, 1)
+    PL.backfill_from_summaries(con, lg, 1)
     closed = con.execute("SELECT COUNT(DISTINCT o.game_id) FROM odds o JOIN games g ON g.id=o.game_id "
                          "WHERE g.completed=1 AND o.fetched_utc < g.date_utc").fetchone()[0]
     assert closed == sum(1 for e in w.events if e["_done"]), closed

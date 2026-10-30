@@ -345,3 +345,20 @@ def fetch_injuries(league, fetched_utc: str) -> list:
 def fetch_summary(league, event_id: str):
     url = BASE.format(path=league.espn_path) + "/summary"
     return parse_summary(_get(url, {"event": event_id}))
+
+
+def summary_odds(data: dict, g: dict) -> list:
+    """Betting lines from a game summary. ESPN keeps them on finished games under
+    "pickcenter" (and sometimes "odds"), in the same shape as the scoreboard."""
+    items = list(data.get("pickcenter") or []) + list(data.get("odds") or [])
+    if not items:
+        return []
+    return parse_event_odds({"competitions": [{"odds": items[:1]}]}, g)
+
+
+def fetch_summary_full(league, g: dict):
+    """(team_rows, player_rows, odds_rows, raw keys) from one summary call."""
+    url = BASE.format(path=league.espn_path) + "/summary"
+    data = _get(url, {"event": g["id"]})
+    t, p = parse_summary(data)
+    return t, p, summary_odds(data, g), sorted(data.keys())

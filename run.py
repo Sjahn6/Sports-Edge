@@ -41,6 +41,7 @@ def cmd_update(cp, args, odds=True):
             if "espn" in cp.get("odds", "source") and not args.lines_only:
                 try:
                     PL.backfill_closing_lines(con, lg, cp.getint("model", "seasons_back"))
+                    PL.backfill_from_summaries(con, lg, cp.getint("model", "seasons_back"))
                 except Exception as e:
                     PL.log(f"  ! closing lines: {e}")
         try:
