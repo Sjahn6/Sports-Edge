@@ -174,13 +174,13 @@ def update_games(con, league, seasons_back=1, fetch_players=True, full=False, es
 
 
 def _save_closing(con, g, rows):
-    """Store a finished game's closing line, stamped two minutes before kickoff."""
+    """Store a finished game's true closing line (from ESPN's game page), stamped two
+    minutes before kickoff so it counts as the last line before the game."""
     if not rows:
         return False
-    if con.execute("SELECT 1 FROM odds WHERE game_id=? AND fetched_utc < ? LIMIT 1",
-                   (g["id"], g["date_utc"])).fetchone():
-        return True
     stamp = (parse_iso(g["date_utc"]) - timedelta(minutes=2)).isoformat(timespec="seconds")
+    if con.execute("SELECT 1 FROM odds WHERE game_id=? AND fetched_utc=? LIMIT 1", (g["id"], stamp)).fetchone():
+        return True
     for r in rows:
         r["fetched_utc"] = stamp
     D.save_odds(con, rows)

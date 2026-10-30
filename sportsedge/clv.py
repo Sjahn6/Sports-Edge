@@ -120,7 +120,7 @@ def grade(con, league, now_iso):
                        "JOIN games g ON g.id=t.game_id WHERE t.league=? AND g.date_utc<=? "
                        "AND (t.clv IS NULL OR t.result IS NULL)", (league.key, now_iso))
     for r in todo:
-        if r["clv"] is None:
+        if r["clv"] is None and r["completed"]:   # wait for the final, when the true close is in
             cv = closing_value(league, r, B.latest_quotes(con, r["game_id"], before=r["date_utc"]))
             if cv:
                 fair, clv, gained, cp, cpr = cv
