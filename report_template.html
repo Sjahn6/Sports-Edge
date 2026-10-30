@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SportsEdge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#f4f2ee; --panel:#ffffff; --ink:#16181d; --muted:#6a6f7a; --line:#e3e0da;
@@ -108,6 +111,96 @@ details.more{margin-top:10px} details.more > summary{font-weight:600;font-size:1
 @media (max-width:640px){ .sportbar .in{display:flex;overflow-x:auto} .sportbar button{flex:0 0 auto;min-width:118px} .sp,.rec{grid-template-columns:1fr} .home-h h2{font-size:20px} header{padding:12px 16px 4px} .sportbar .in{padding:4px 12px 8px;gap:6px} .sportbar button{padding:8px 10px} .sportbar button b{font-size:18px} .sportbar button span{font-size:11px;white-space:normal} main{padding:14px 12px 60px} .grid{grid-template-columns:1fr} th,td{padding:8px 8px} .controls input[type=search]{min-width:0;flex:1} }
 .why{margin-top:8px;font-size:13px}
 .why ul{margin:6px 0 0;padding-left:18px} .why li{margin:3px 0}
+
+/* ===================== SportsEdge look =====================
+   Scoreboard navy, rink white, a color per sport, real team colors on every matchup. */
+:root{
+  --bg:#eaf0f3; --panel:#ffffff; --ink:#10243b; --muted:#5d6b7b; --line:#d6dee5; --chip:#e3eaef;
+  --accent:#12804a; --accent-soft:#dcf1e5; --warn:#a96300; --warn-soft:#fcefd9; --bad:#c22a35;
+  --nfl:#1f7a45; --nba:#e8710a; --nhl:#1b6fb8; --navy:#10243b; --sport:var(--navy);
+  --display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
+  --body:Barlow,"Segoe UI",-apple-system,BlinkMacSystemFont,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0b1726; --panel:#122336; --ink:#e8eef4; --muted:#93a3b5; --line:#22364c; --chip:#1a2d43;
+    --accent:#3fcf86; --accent-soft:#123a2a; --warn:#f0b04e; --warn-soft:#3a2b12; --bad:#ff6b73; --navy:#0e2034; }
+}
+body{font:15px/1.45 var(--body);background:var(--bg)}
+header{max-width:none;padding:0;background:var(--navy);color:#fff}
+header h1{max-width:1200px;margin:0 auto;padding:14px 20px 12px;font-family:var(--display);font-weight:900;font-size:30px;letter-spacing:.01em;line-height:1}
+header h1 span{color:#ffb547}
+header h1::after{content:"";display:block;height:3px;width:56px;margin-top:8px;background:var(--sport);border-radius:2px}
+.stick{background:var(--bg);box-shadow:0 1px 0 var(--line)}
+.sportbar{background:var(--navy)}
+.sportbar .in{padding:0 16px 14px}
+.sportbar button{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#fff;border-top:4px solid var(--c,#8aa0b6);border-radius:10px}
+.sportbar button b{font-family:var(--display);font-size:24px;font-weight:800;letter-spacing:.02em;line-height:1.05}
+.sportbar button span{color:#b9c6d4}
+.sportbar button:hover{background:rgba(255,255,255,.11)}
+.sportbar button.on{background:var(--c,#fff);border-color:var(--c,#fff);color:#fff}
+.sportbar button.on span{color:#fff;opacity:.9}
+.sportbar button .dot{background:#ffb547} .sportbar button.on .dot{background:#fff}
+nav{background:var(--bg)}
+nav button{font-weight:600;font-size:15px}
+nav button.on{border-bottom:3px solid var(--sport);color:var(--ink)}
+h2{font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:.01em;margin:26px 0 10px;line-height:1.1}
+.home-h h2{font-size:34px;margin:0}
+.dayh h2{font-size:26px}
+th{text-transform:none;letter-spacing:0;font-size:12.5px}
+.kv .h,.tile .l{text-transform:none;letter-spacing:0;font-size:12.5px;font-weight:600}
+.tile .v{font-family:var(--display);font-size:32px;font-weight:800}
+.pts .pl{text-transform:none;letter-spacing:0;font-size:13px;font-weight:600}
+.pk-tag{display:none}
+.card{border-radius:14px;padding:0;overflow:hidden;border:1px solid var(--line)}
+.card > *{margin-left:14px;margin-right:14px}
+.card .top{margin-top:12px}
+.card .teams{font-family:var(--display);font-weight:800;font-size:23px;letter-spacing:.01em;line-height:1.05}
+.card .when{font-weight:600}
+.card details.more{margin-bottom:12px}
+.card .jersey{display:flex;height:6px;margin:0}
+.card .jersey i{flex:1}
+.wb{height:34px;border-radius:8px;font-size:13.5px;margin:12px 14px 4px;font-weight:700;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+.wb span{padding:0 10px}
+.pick{border-radius:10px;background:var(--accent-soft);border-left:4px solid var(--accent)}
+.pick.none{border-left-color:var(--line)}
+.pk-top b{font-family:var(--display);font-size:24px;font-weight:800;letter-spacing:.01em;line-height:1.05}
+.pk-sub b{color:var(--ink)}
+.lg{font-family:var(--display);font-size:13px;font-weight:800;letter-spacing:.03em;padding:2px 7px;background:var(--lc,var(--ink));color:#fff;border-radius:5px}
+.days button{border-radius:10px}
+.days button b{font-family:var(--display);font-size:20px;font-weight:800}
+.days button.on{background:var(--navy);border-color:var(--navy)}
+.hp{border-radius:12px;border-left:4px solid var(--lc,var(--line))}
+.hp .t b{font-family:var(--display);font-size:21px;font-weight:800;letter-spacing:.01em}
+.sp button b{font-family:var(--display);font-size:28px;font-weight:800}
+.sp button{border-top:4px solid var(--lc,var(--line))}
+.pill{font-weight:700}
+
+/* the featured pick: a scoreboard in the two teams' colors */
+.hero{position:relative;border-radius:16px;overflow:hidden;background:var(--navy);color:#fff;display:grid;grid-template-columns:1fr auto 1fr;min-height:210px;cursor:pointer;margin-bottom:6px}
+.hero .side{padding:20px 22px;display:flex;flex-direction:column;justify-content:space-between;background:var(--tc)}
+.hero .side.away{background:linear-gradient(100deg,var(--tc) 0%,var(--tc) 70%,transparent 100%)}
+.hero .side.home{background:linear-gradient(260deg,var(--tc) 0%,var(--tc) 70%,transparent 100%);text-align:right}
+.hero .nm{font-family:var(--display);font-weight:900;font-size:clamp(32px,5vw,58px);line-height:.92;letter-spacing:.005em;color:var(--tx,#fff)}
+.hero .ct{font-size:13px;font-weight:600;color:var(--tx,#fff);opacity:.85}
+.hero .mid{padding:18px 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-width:250px;background:var(--navy)}
+.hero .tag{font-size:13px;color:#b9c6d4;font-weight:600}
+.hero .bet{font-family:var(--display);font-weight:900;font-size:clamp(28px,3.6vw,40px);line-height:1;margin:6px 0 10px;color:#fff}
+.hero .big{font-family:var(--display);font-weight:900;font-size:64px;line-height:.9;color:#ffb547}
+.hero .bl{font-size:13px;color:#b9c6d4}
+.hero .why1{font-size:13.5px;color:#dbe4ec;margin-top:10px;max-width:30ch}
+@media (max-width:640px){
+  header h1{font-size:26px;padding:12px 16px 10px}
+  .sportbar .in{padding:0 12px 12px}
+  .hero{grid-template-columns:1fr 1fr;grid-template-rows:auto auto}
+  .hero .mid{grid-column:1 / 3;grid-row:2;min-width:0}
+  .hero .side{padding:14px 14px 12px}
+  .hero .side.away,.hero .side.home{background:var(--tc)}
+}
+@media (prefers-reduced-motion: no-preference){
+  .hero .big{animation:tick .7s cubic-bezier(.2,.8,.2,1) both}
+  @keyframes tick{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
+}
+button:focus-visible,.hp:focus-visible,.hero:focus-visible,summary:focus-visible{outline:3px solid #ffb547;outline-offset:2px}
 .steps{display:grid;grid-template-columns:1fr auto;gap:2px 14px;font-variant-numeric:tabular-nums;margin:6px 0}
 .steps .sub{font-weight:700;border-top:1px solid var(--line);padding-top:2px}
 .inj{font-size:12.5px;margin:4px 0 0} .inj b{font-weight:600}
@@ -202,6 +295,23 @@ function useLeague(k){   // the helpers below read these, so switch them per lea
   SPREAD = D.key === "nhl" ? "puck line" : "spread";
 }
 useLeague(CUR);
+const SPORTC = {nfl:"#1f7a45", nba:"#e8710a", nhl:"#1b6fb8"};
+const FALLBACK = ["#1d428a","#c8102e","#006847","#552583","#f58426","#00788c","#860038","#0b2265","#ffb612","#4f2683","#002b5c","#e03a3e"];
+function hexRgb(h){ h = h.replace("#",""); return [0,2,4].map(i=>parseInt(h.slice(i,i+2),16)); }
+function textOn(h){   // white or navy, whichever reads better on this team color
+  const [r,g,b] = hexRgb(h).map(v=>{v/=255; return v<=.03928? v/12.92 : Math.pow((v+.055)/1.055,2.4);});
+  const L = 0.2126*r+0.7152*g+0.0722*b;
+  return (1.05/(L+.05)) >= ((L+.05)/0.067) ? "#ffffff" : "#10243b";
+}
+function mixWhite(h, t){ return "#" + hexRgb(h).map(v=>Math.round(v+(255-v)*t).toString(16).padStart(2,"0")).join(""); }
+function teamColors(g){
+  const pick = (side) => { const c = g[side+"_color"]; if (c) return "#" + c;
+    let x = 0; for (const ch of g[side]) x = (x*31 + ch.charCodeAt(0)) >>> 0; return FALLBACK[x % FALLBACK.length]; };
+  let h = pick("home"), a = pick("away");
+  const d = hexRgb(h).reduce((s,v,i)=>s+Math.abs(v-hexRgb(a)[i]),0);
+  if (d < 90) a = mixWhite(a, .55);   // two navy teams: lighten the visitors so they read apart
+  return {home: h, away: a};
+}
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pct = (x,d=1) => x==null ? "–" : (x*100).toFixed(d)+"%";
@@ -219,18 +329,19 @@ function showTab(t){
   history.replaceState(null, "", "#" + CUR + "/" + t);
 }
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => showTab(b.dataset.t));
+document.documentElement.style.setProperty("--sport", (HOMEMODE || DAYMODE) ? "#ffb547" : SPORTC[CUR]);
 const DAYKEY = iso => new Date(iso).toLocaleDateString("en-CA",{timeZone:ALL.tz});
 const TODAY = new Date().toLocaleDateString("en-CA",{timeZone:ALL.tz});
 const allGames = ALL.order.flatMap(k => ALL.leagues[k].board.map(g => ({k, g})));
-$("#lsw").innerHTML = `<button class="${HOMEMODE?"on":""}" onclick="location.hash='home';location.reload()"><b>Home</b><span>today at a glance</span></button>` +
-  `<button class="${DAYMODE?"on":""}" onclick="location.hash='day';location.reload()"><b>By day</b><span>${allGames.filter(x=>DAYKEY(x.g.kickoff)===TODAY).length} games today, all sports</span></button>` + ALL.order.map(k => {
+$("#lsw").innerHTML = `<button style="--c:#2d5d8f" class="${HOMEMODE?"on":""}" onclick="location.hash='home';location.reload()"><b>Home</b><span>today at a glance</span></button>` +
+  `<button style="--c:#2d5d8f" class="${DAYMODE?"on":""}" onclick="location.hash='day';location.reload()"><b>By day</b><span>${allGames.filter(x=>DAYKEY(x.g.kickoff)===TODAY).length} games today, all sports</span></button>` + ALL.order.map(k => {
   const L = ALL.leagues[k];
   const n = L.board.filter(g => ["home_ml","away_ml"].some(s => g.best[s] && g.best[s].ev > 0 && g.best[s].price <= L.cfg.band_high && g.best[s].price >= L.cfg.band_low)).length;
   const day = new Date().toLocaleDateString("en-US",{timeZone:ALL.tz});
   const today = L.board.filter(g => new Date(g.kickoff).toLocaleDateString("en-US",{timeZone:ALL.tz}) === day).length;
   const games = L.key === "nfl" ? `${L.board.length} games this week` : today ? `${today} games today` : `${L.board.length} games this week`;
   const plays = n ? `<i class="dot"></i>${n} at ${price(L.cfg.target_price)}` : `none at ${price(L.cfg.target_price)}`;
-  return `<button class="${!DAYMODE && !HOMEMODE && k===CUR?"on":""}" onclick="location.hash='${k}/'+(location.hash.split('/')[1]||'chalk');location.reload()"><b>${esc(L.league)}</b><span>${plays} · ${games}</span></button>`;
+  return `<button style="--c:${SPORTC[k]}" class="${!DAYMODE && !HOMEMODE && k===CUR?"on":""}" onclick="location.hash='${k}/'+(location.hash.split('/')[1]||'chalk');location.reload()"><b>${esc(L.league)}</b><span>${plays} · ${games}</span></button>`;
 }).join("");
 { const t = location.hash.split("/")[1]; if (t && document.getElementById(t)) showTab(t); }
 
@@ -350,8 +461,9 @@ if (!D.board.length) $("#t-bets").innerHTML = `<tr><td class="empty">No upcoming
 // ---------- games
 function bar(p){ return `<div class="split"><i style="width:${(p*100).toFixed(1)}%"></i></div>`; }
 function winBar(g){
-  const pa = 1 - g.p_home;
-  return `<div class="wb"><span style="width:${(pa*100).toFixed(1)}%" class="${pa>=0.5?"fav":""}">${esc(abbr(g,"away"))} ${pct(pa,0)}</span><span style="width:${(g.p_home*100).toFixed(1)}%" class="${g.p_home>0.5?"fav":""}">${esc(abbr(g,"home"))} ${pct(g.p_home,0)}</span></div>`;
+  const pa = 1 - g.p_home, c = teamColors(g);
+  const seg = (side, p) => `<span style="width:${(p*100).toFixed(1)}%;background:${c[side]};color:${textOn(c[side])}">${esc(abbr(g,side))} ${pct(p,0)}</span>`;
+  return `<div class="wb">${seg("away", pa)}${seg("home", g.p_home)}</div>`;
 }
 const KEYLABEL = {home_ml:"home", away_ml:"away"};
 function pickFor(g){
@@ -464,8 +576,9 @@ function cardHtml(g){
       ${pk.others.length ? `<div class="small">Also +EV: ${pk.others.map(k=>esc(pickLabel(g,k))).join(", ")}</div>` : ""}
     </div>`
     : `<div class="pick none">${hasLines ? "No bet. Nothing here clears the bar." : "No DraftKings line saved yet."}</div>`;
-  return `<div class="card" id="card-${g.id}">
-    <div class="top"><div class="teams">${esc(abbr(g,"away"))} @ ${esc(abbr(g,"home"))}</div><div class="when">${when(g.kickoff)}</div></div>
+  const jc = teamColors(g);
+  return `<div class="card" id="card-${g.id}"><div class="jersey"><i style="background:${jc.away}"></i><i style="background:${jc.home}"></i></div>
+    <div class="top"><div class="teams">${esc(abbr(g,"away"))} @ ${esc(abbr(g,"home"))}</div><div class="when" style="white-space:nowrap">${new Date(g.kickoff).toLocaleString("en-US",{timeZone:tz,weekday:"short",hour:"numeric",minute:"2-digit"})}</div></div>
     <div class="small">${esc(g.away)} at ${esc(g.home)}${flag?` <span class="pill warnp">${esc(flag)}</span>`:""}</div>
     ${winBar(g)}
     ${pickHtml}
@@ -692,7 +805,7 @@ function renderDay(){
   h += `<div class="dayh"><h2 style="font-size:20px">${new Date(sel+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</h2><span class="small">${todays.length} games</span></div>`;
   h += `<h2>Best plays today</h2>` + (picks.length ? `<div class="panel">` + picks.map(p =>
     `<div class="bp" onclick="document.getElementById('card-${p.g.id}').scrollIntoView({behavior:'smooth',block:'start'})">
-      <span class="lg">${esc(ALL.leagues[p.k].league)}</span>
+      <span class="lg" style="--lc:${SPORTC[p.k]}">${esc(ALL.leagues[p.k].league)}</span>
       <div><b>${esc(p.label)}</b><div class="small">${esc(abbr(p.g,"away"))} @ ${esc(abbr(p.g,"home"))} · ${new Date(p.g.kickoff).toLocaleTimeString("en-US",{timeZone:ALL.tz,hour:"numeric",minute:"2-digit"})} · win chance ${pct(p.pk.b.p_cover,0)} · edge ${sgn((p.pk.b.p_cover-p.need)*100,0)}%</div></div>
       <span class="pill ${p.edge.c}">${esc(p.edge.t)}</span></div>`).join("") + `</div>`
     : `<div class="panel"><div class="empty">No plays clear the bar today.</div></div>`);
@@ -726,15 +839,34 @@ function renderHome(){
   }
   useLeague(CUR);
   const go = (p) => `location.hash='day/${p.day}';location.reload()`;
-  const tile = p => `<div class="hp" onclick="${go(p)}">
-      <div class="t"><span><span class="lg">${esc(ALL.leagues[p.k].league)}</span> <b>${esc(p.label)}</b></span><span class="pill ${p.edge.c}">${esc(p.edge.t)}</span></div>
+  const tile = p => `<div class="hp" tabindex="0" style="--lc:${SPORTC[p.k]}" onclick="${go(p)}">
+      <div class="t"><span><span class="lg" style="--lc:${SPORTC[p.k]}">${esc(ALL.leagues[p.k].league)}</span> <b>${esc(p.label)}</b></span><span class="pill ${p.edge.c}">${esc(p.edge.t)}</span></div>
       <div class="m">${esc(abbr(p.g,"away"))} @ ${esc(abbr(p.g,"home"))} · ${p.day===TODAY?"":esc(t12(p.day).toLocaleDateString("en-US",{weekday:"short"}))+" "}${time(p.g.kickoff)}</div>
       <div class="m">Win chance <b style="color:var(--ink)">${pct(p.pk.b.p_cover,0)}</b> · Edge <b class="pos">${sgn(p.margin*100,0)}%</b>${p.pts[1] && p.pts[1][0]!=="Bet type" ? " · " + esc(p.pts[1][1]) : ""}</div></div>`;
 
   // 1. top plays for the focus day
-  const top = picks.filter(p=>p.day===focus).sort((a,b)=>b.pk.b.ev-a.pk.b.ev).slice(0,6);
-  h += `<h2>Top plays ${focus===TODAY?"today":esc(dayName(focus))}</h2>` +
-       (top.length ? `<div class="hgrid">${top.map(tile).join("")}</div>` : `<div class="panel"><div class="empty">No plays clear the bar ${focus===TODAY?"today":"that day"}.</div></div>`);
+  const top = picks.filter(p=>p.day===focus).sort((a,b)=>b.pk.b.ev-a.pk.b.ev).slice(0,7);
+  // featured: the best play that doesn't need a news check, your price range first
+  const inBand = p => p.pk.key.endsWith("_ml") && p.pk.b.price <= ALL.leagues[p.k].cfg.band_high && p.pk.b.price >= ALL.leagues[p.k].cfg.band_low;
+  const clean = top.filter(p => p.edge.c !== "warnp");
+  const feat = clean.find(inBand) || clean[0] || top[0];
+  if (feat){
+    useLeague(feat.k);
+    const c = teamColors(feat.g), side = feat.pk.key.endsWith("_ml") ? feat.pk.key.slice(0,-3) : feat.pk.key;
+    const reason = feat.pts.find(x => x[0] === "Main reason" || x[0] === "Keeps it close");
+    h += `<div class="hero" tabindex="0" onclick="${go(feat)}">
+      <div class="side away" style="--tc:${c.away};--tx:${textOn(c.away)}"><div class="ct">${esc(feat.g.away.replace(abbr(feat.g,"away"),"").trim() || "Away")}</div><div class="nm">${esc(abbr(feat.g,"away"))}</div><div class="ct">${pct(1-feat.g.p_home,0)} to win</div></div>
+      <div class="mid"><div class="tag">${esc(ALL.leagues[feat.k].league)} · ${feat.day===TODAY?"tonight":esc(dayName(feat.day))} ${time(feat.g.kickoff)} · featured play</div>
+        <div class="bet">${esc(feat.label)}</div>
+        <div class="big">${pct(feat.pk.b.p_cover,0)}</div><div class="bl">win chance, ${sgn(feat.margin*100,0)}% edge</div>
+        ${reason ? `<div class="why1">${esc(reason[1])}</div>` : ""}</div>
+      <div class="side home" style="--tc:${c.home};--tx:${textOn(c.home)}"><div class="ct">${esc(feat.g.home.replace(abbr(feat.g,"home"),"").trim() || "Home")}</div><div class="nm">${esc(abbr(feat.g,"home"))}</div><div class="ct">${pct(feat.g.p_home,0)} to win</div></div>
+    </div>`;
+    useLeague(CUR);
+  }
+  const rest = top.filter(p => p !== feat).slice(0,6);
+  h += `<h2>More plays ${focus===TODAY?"today":esc(dayName(focus))}</h2>` +
+       (rest.length ? `<div class="hgrid">${rest.map(tile).join("")}</div>` : !feat ? `<div class="panel"><div class="empty">No plays clear the bar ${focus===TODAY?"today":"that day"}.</div></div>` : `<div class="panel"><div class="empty">That's the only play that clears the bar.</div></div>`);
 
   // 2. -200 style plays this week
   const chalk = [];
@@ -747,7 +879,7 @@ function renderHome(){
   }
   chalk.sort((a,b)=>a.g.kickoff.localeCompare(b.g.kickoff));
   h += `<h2>Your ${price(ALL.leagues[ALL.order[0]].cfg.target_price)} plays this week</h2>` + (chalk.length ? `<div class="panel">` + chalk.slice(0,8).map(c =>
-      `<div class="bp" onclick="location.hash='day/${c.day}';location.reload()"><span class="lg">${esc(ALL.leagues[c.k].league)}</span>
+      `<div class="bp" onclick="location.hash='day/${c.day}';location.reload()"><span class="lg" style="--lc:${SPORTC[c.k]}">${esc(ALL.leagues[c.k].league)}</span>
         <div><b>${esc(abbr(c.g,c.s.slice(0,-3)))} to win ${price(c.b.price)}</b><div class="small">${esc(abbr(c.g,"away"))} @ ${esc(abbr(c.g,"home"))} · ${esc(dayName(c.day))} ${time(c.g.kickoff)}</div></div>
         <span class="small">Win <b>${pct(c.b.p_win,0)}</b> · Edge <b class="pos">${sgn((c.b.p_win-M_implied(c.b.price))*100,0)}%</b></span></div>`).join("") + `</div>`
     : `<div class="panel"><div class="empty">No favorites in your price range clear the bar this week. That's normal: DraftKings prices favorites tightly.</div></div>`);
@@ -757,7 +889,7 @@ function renderHome(){
     const gs = ALL.leagues[k].board.filter(g=>DAYKEY(g.kickoff)===focus);
     const np = picks.filter(p=>p.k===k && p.day===focus).length;
     const first = gs.length ? time(gs.slice().sort((a,b)=>a.kickoff.localeCompare(b.kickoff))[0].kickoff) : "";
-    return `<button onclick="location.hash='day/${focus}';location.reload()"><b>${esc(ALL.leagues[k].league)}</b><span>${gs.length ? `${gs.length} game${gs.length>1?"s":""} · first at ${first} · ${np} pick${np===1?"":"s"}` : "no games"}</span></button>`;
+    return `<button style="--lc:${SPORTC[k]}" onclick="location.hash='day/${focus}';location.reload()"><b>${esc(ALL.leagues[k].league)}</b><span>${gs.length ? `${gs.length} game${gs.length>1?"s":""} · first at ${first} · ${np} pick${np===1?"":"s"}` : "no games"}</span></button>`;
   }).join("") + `</div>`;
 
   // 4. key injuries in the focus day's games
@@ -772,8 +904,8 @@ function renderHome(){
   }
   inj.sort((a,b)=>b.p.pts/ALL.leagues[b.k].margin_sd - a.p.pts/ALL.leagues[a.k].margin_sd);
   h += `<h2>Key injuries</h2>` + (inj.length ? `<div class="panel">` + inj.slice(0,8).map(x =>
-      `<div class="bp" style="cursor:default"><span class="lg">${esc(ALL.leagues[x.k].league)}</span>
-        <div><b>${esc(x.p.player)}</b> <span class="small">${esc(x.p.pos)} · ${esc(abbr(x.g,x.side))}</span><div class="small">${esc(abbr(x.g,"away"))} @ ${esc(abbr(x.g,"home"))} · worth about ${num(x.p.pts, ALL.leagues[x.k].unit==="pts"?1:2)} ${ALL.leagues[x.k].unit==="pts"?"pts":"goals"}</div></div>
+      `<div class="bp" style="cursor:default"><span class="lg" style="--lc:${SPORTC[x.k]}">${esc(ALL.leagues[x.k].league)}</span>
+        <div><b>${esc(x.p.player)}</b> · ${esc(x.g[x.side])}<div class="small">${esc(x.p.pos)}${x.p.detail?" · "+esc(x.p.detail.toLowerCase()):""}${x.p.starter_qb?" · starting QB":x.p.starter_g?" · starting goalie":""} · ${esc(abbr(x.g,"away"))} @ ${esc(abbr(x.g,"home"))} · worth about ${num(x.p.pts, ALL.leagues[x.k].unit==="pts"?1:2)} ${ALL.leagues[x.k].unit==="pts"?"pts":"goals"}</div></div>
         <span class="${stClass(x.p.status)}">${esc(x.p.status)}</span></div>`).join("") + `</div>`
     : `<div class="panel"><div class="empty">No key players out in these games.</div></div>`);
 
