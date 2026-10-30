@@ -269,7 +269,7 @@ button:focus-visible,.hp:focus-visible,.hero:focus-visible,summary:focus-visible
   <section id="bets">
     <div class="note" id="bets-note"></div>
     <div class="controls">
-      <label>Market <select id="b-mkt"><option value="">Spreads and totals</option><option value="spread">Spreads</option><option value="total">Totals</option><option value="moneyline">Moneylines</option></select></label>
+      <label>Market <select id="b-mkt"><option value="">All bet types</option><option value="spread">Spreads</option><option value="total">Totals</option><option value="moneyline">Moneylines</option></select></label>
       <label>Min EV <select id="b-ev"><option value="0.02">2%</option><option value="0.03">3%</option><option value="0.05">5%</option><option value="0">Show all</option></select></label>
     </div>
     <div class="panel tablewrap"><table id="t-bets"></table></div>
@@ -446,12 +446,16 @@ function betLabel(g,p){
 }
 function allPlays(minEv, mkt){
   const out = [];
+  const now = new Date().toISOString();
   for (const g of D.board){
+    if (g.kickoff <= now) continue;   // already started: the line is gone
     for (const [k, side, market] of [["home","home","spread"],["away","away","spread"],["over","over","total"],["under","under","total"],["home_ml","home","moneyline"],["away_ml","away","moneyline"]]){
       const b = g.best[k]; if (!b) continue;
       if (mkt && market!==mkt) continue;
       if (b.ev < minEv) continue;
-      const p = {...b, side, market, key:k};
+      const bench = (D.cfg.benched||[]).includes(market);
+      if (bench && mkt !== market) continue;   // benched bet types only show when picked in the filter
+      const p = {...b, side, market, key:k, bench};
       const edgePts = market==="moneyline" ? null : market==="spread"
         ? (side==="home" ? g.exp_margin + p.point : -g.exp_margin + p.point)
         : (side==="over" ? g.exp_total - p.point : p.point - g.exp_total);
@@ -464,13 +468,14 @@ function drawBets(){
   const rows = allPlays(+$("#b-ev").value, $("#b-mkt").value);
   table($("#t-bets"), [
     {k:"bet",h:"Bet",v:r=>betLabel(r.g,r.p),f:r=>`<b>${esc(betLabel(r.g,r.p))} ${price(r.p.price)}</b>` +
+      (r.p.bench ? ` <span class="pill pass">Bench: Lean only</span>` : "") +
       (qbFlag(r.g) ? ` <span class="pill warnp">${esc(qbFlag(r.g))}</span>` : "") +
       (r.edgePts != null && Math.abs(r.edgePts) >= D.warn_gap ? ` <span class="pill warnp" title="Model and market disagree a lot. Check injuries and lineup news first.">check news</span>` : "") +
       `<div class="small">${esc(abbr(r.g,"away"))} @ ${esc(abbr(r.g,"home"))} · ${when(r.g.kickoff)}</div>`},
     {k:"pc",h:"Win chance",n:1,v:r=>r.p.p_cover,f:r=>`<b>${pct(r.p.p_cover,0)}</b>`},
     {k:"edge",h:"Edge",n:1,v:r=>r.p.p_cover-M_implied(r.p.price),f:r=>`<span class="pos"><b>${sgn((r.p.p_cover-M_implied(r.p.price))*100,0)}%</b></span>`},
     {k:"ev",h:"EV",n:1,v:r=>r.p.ev,f:r=>`<span class="pill ${r.p.ev>0?"go":""}">${sgn(r.p.ev*100)}%</span>`},
-    {k:"k",h:"Stake",n:1,v:r=>r.p.kelly,f:r=>`${pct(r.p.kelly,1)} <span class="small">of bankroll</span>`},
+    {k:"k",h:"Stake",n:1,v:r=>r.p.bench?0:r.p.kelly,f:r=>r.p.bench?`<span class="small">skip for now</span>`:`${pct(r.p.kelly,1)} <span class="small">of bankroll</span>`},
     {k:"why",h:"",v:()=>0,f:r=>`<button class="linkbtn" onclick="openWhy('${r.g.id}','${r.p.key}')">Why</button>`},
   ], rows, "ev");
 }
@@ -487,7 +492,8 @@ function winBar(g){
 const KEYLABEL = {home_ml:"home", away_ml:"away"};
 function pickFor(g){
   // your style first: a moneyline favorite in the price range, then the best EV play
-  const ok = k => g.best[k] && g.best[k].ev >= D.cfg.min_ev && (g.best[k].p_cover - M_implied(g.best[k].price)) >= (D.cfg.min_edge ?? 0.03);
+  if (g.kickoff <= new Date().toISOString()) return null;   // started: no pick to bet
+  const ok = k => g.best[k] && !(D.cfg.benched||[]).includes(MKT_OF[k]) && g.best[k].ev >= D.cfg.min_ev && (g.best[k].p_cover - M_implied(g.best[k].price)) >= (D.cfg.min_edge ?? 0.03);
   const band = ["home_ml","away_ml"].filter(k => ok(k) && g.best[k].price <= D.cfg.band_high && g.best[k].price >= D.cfg.band_low);
   const all = ["home_ml","away_ml","home","away","over","under"].filter(ok).sort((a,b)=>g.best[b].ev-g.best[a].ev);
   const key = band.sort((a,b)=>g.best[b].ev-g.best[a].ev)[0] || all[0];
