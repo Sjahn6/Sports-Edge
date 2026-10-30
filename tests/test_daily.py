@@ -8,6 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+COLORS = __import__("json").loads((Path(__file__).parent / "fixtures" / "team_colors.json").read_text())
 sys.path.insert(0, str(ROOT))
 
 import numpy as np  # noqa: E402
@@ -117,7 +118,7 @@ class World:
 
         def comp(t, side, sc):
             return {"homeAway": side, "score": str(sc if sc is not None else 0),
-                    "team": {"id": str(self.teams.index(t) + 1), "displayName": t, "abbreviation": self.ab[t]}}
+                    "team": {"id": str(self.teams.index(t) + 1), "displayName": t, "abbreviation": self.ab[t], "color": COLORS.get(t, "")}}
         ev = {"id": gid, "date": date, "season": {"year": season, "type": 2},
               "competitions": [{"date": date, "neutralSite": False,
                                 "status": {"type": {"completed": done}},

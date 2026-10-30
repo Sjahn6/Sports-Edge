@@ -9,6 +9,7 @@ from datetime import timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+COLORS = __import__("json").loads((Path(__file__).parent / "fixtures" / "team_colors.json").read_text())
 sys.path.insert(0, str(ROOT))
 
 import numpy as np  # noqa: E402
@@ -48,7 +49,7 @@ def sim_score(h, a):
 def espn_event(gid, season, week, date, h, a, completed, hs=None, as_=None):
     def comp(t, side, sc):
         return {"homeAway": side, "score": str(sc) if sc is not None else "0",
-                "team": {"id": str(TEAMS.index(t) + 1), "displayName": t, "abbreviation": ABBR[t]}}
+                "team": {"id": str(TEAMS.index(t) + 1), "displayName": t, "abbreviation": ABBR[t], "color": COLORS.get(t, "")}}
     return {"id": gid, "date": date, "season": {"year": season, "type": 2}, "week": {"number": week},
             "competitions": [{"date": date, "neutralSite": False,
                               "status": {"type": {"completed": completed, "state": "post" if completed else "pre"}},

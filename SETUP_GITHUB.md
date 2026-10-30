@@ -1,6 +1,6 @@
 # Put SportsEdge online (free, about 20 minutes, once)
 
-When you're done, the dashboard lives at `https://sjahn6.github.io/sportsedge/`,
+When you're done, the dashboard lives at `https://sjahn6.github.io/Sports-Edge/`,
 updates itself four times a day, and works on any phone. Your Mac can be off.
 
 ## 1. Sign in
@@ -38,7 +38,7 @@ Mac hides the folder GitHub needs for this, so you'll paste it in once:
 2. Click **Run workflow**, then the green **Run workflow** button.
 3. The first run loads two seasons for all three leagues and takes about 10 minutes.
    A green check means it worked.
-4. Open `https://sjahn6.github.io/sportsedge/`.
+4. Open `https://sjahn6.github.io/Sports-Edge/`.
 
 On your iPhone, open that address in Safari, tap **Share**, then **Add to Home Screen**.
 It shows up like an app.
