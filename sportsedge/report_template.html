@@ -603,13 +603,17 @@ function reasonsFor(g, k){
 }
 const cap = t => t ? t[0].toUpperCase() + t.slice(1) : t;
 function joinWhy(list){
-  // "the Falcons are better and the Falcons are at home" -> "...and they're at home"
+  const both = (re, txt) => list.length >= 2 && re.test(list[0]) && re.test(list[1]) ? txt : null;
+  const merged = both(/don't score much$/, "neither team scores much") || both(/defend well$/, "both teams defend well")
+    || both(/score more than most teams$/, "both teams score a lot") || both(/give up a lot$/, "both defenses give up a lot");
+  if (merged) return merged;
+  // "the Pelicans played last night and the Pelicans are without X" -> "...and they're without X"
   if (list.length < 2) return list.join("");
-  const m = list[0].match(/^the [A-Z0-9][\w. ]*?(?= (are|have|score|don't|give|defend))/);
+  const m = list[0].match(/^the ((?:[A-Z0-9][\w.]*\s?)+)\s/);
   let second = list[1];
-  if (m && second.startsWith(m[0] + " ")) {
-    second = second.slice(m[0].length + 1).replace(/^are /, "they're ").replace(/^have /, "they've ")
-      .replace(/^(score|give|defend|don't)/, "they $1");
+  if (m && second.startsWith("the " + m[1].trim() + " ")) {
+    second = "they " + second.slice(("the " + m[1].trim() + " ").length);
+    second = second.replace(/^they are /, "they're ").replace(/^they have /, "they've ");
   }
   return list[0] + " and " + second;
 }
@@ -621,13 +625,20 @@ function whyText(g, k, isPick){
   const why = reasonsFor(g, k).slice(0,2);
   let lead;
   if (side === "over" || side === "under"){
-    lead = `The model projects ${num(g.exp_total,U1)} total ${u}, ${side==="over"?"above":"below"} the ${b.point} line` + (why.length ? ` because ${joinWhy(why)}.` : ".");
+    const gap = side === "over" ? g.exp_total - b.point : b.point - g.exp_total;
+    lead = gap > 0.05
+      ? `The model projects ${num(g.exp_total,U1)} total ${u}, ${side==="over"?"above":"below"} the ${b.point} line` + (why.length ? ` because ${joinWhy(why)}.` : ".")
+      : (D.model === "poisson" && side === "under")
+        ? `The model projects ${num(g.exp_total,U1)} total ${u} on average, but hockey scores bunch at the low end, so ${Math.floor(b.point)} or fewer still happens about ${pct(b.p_cover,0)} of the time` + (why.length ? `. ${cap(joinWhy(why))}.` : ".")
+        : `The model projects ${num(g.exp_total,U1)} total ${u}, right around the ${b.point} line` + (why.length ? `, and ${joinWhy(why)}.` : ".");
   } else {
     const T = abbr(g,side), O = abbr(g, side==="home" ? "away" : "home"), tm = g.exp_margin * (side==="home" ? 1 : -1);
     if (k.endsWith("_ml"))
       lead = tm >= 0
         ? `The model makes the ${T} the more likely winner` + (why.length ? ` because ${joinWhy(why)}.` : ".")
-        : `The ${O} are favored, but the model gives the ${T} a better shot than the price suggests` + (why.length ? `: ${joinWhy(why)}.` : ".");
+        : ed > 0.005
+          ? `The ${O} are favored, but the model gives the ${T} a better shot than the price suggests` + (why.length ? `: ${joinWhy(why)}.` : ".")
+          : `The ${O} are favored and the model mostly agrees. The ${T} are just the side it likes a little more at this price` + (why.length ? `, since ${joinWhy(why)}.` : ".");
     else
       lead = `The model has the ${tm >= 0 ? T : O} by ${n(tm)}, so ${T} ${line(b.point)} covers with about ${n(tm + b.point)} to spare.` + (why.length ? ` ${cap(joinWhy(why))}.` : "");
   }
