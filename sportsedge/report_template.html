@@ -1286,7 +1286,7 @@ function renderTop(){
   const nice = d => d === TODAY ? "Today" : new Date(d+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"});
   const time = iso => new Date(iso).toLocaleTimeString("en-US",{timeZone:ALL.tz,hour:"numeric",minute:"2-digit"});
   let h = `<div class="home-h"><h2>Top 5 picks</h2><span class="small">Updated ${when(ALL.generated)} · DraftKings lines</span></div>
-    <p class="small">The ${T.n||5} picks the analysis is most sure of each day, across every sport, at any odds. It skips coin-flip games and favorites priced worse than ${price(T.min_price||-250)} (easy calls that pay too little), so some days have fewer than 5.</p>`;
+    <p class="small">The ${T.n||5} picks the analysis is most sure of each day, across every sport, at any odds. A pick only makes it if calls this sure have historically won about as often as its price needs to break even, or more. So a big favorite can make it if the record backs it up, and coin flips never do. Some days have fewer than 5.</p>`;
   if (!days.length) h += `<div class="panel"><div class="empty">No picks yet for the next few days. Check back after the next update.</div></div>`;
   for (const d of days){
     const list = T.days[d];

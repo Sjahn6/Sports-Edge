@@ -60,14 +60,18 @@ def conf_word(rate):
 
 
 TOP_N = 5
-TOP_MIN_PRICE = -250   # Sean: nothing worse than -250, those are easy calls that pay too little
+TOP_SLACK = 0.02   # a pick qualifies if calls this sure were right within 2 points of what its price needs, or better
 
 
 def top_rank(cands, n=TOP_N):
-    """cands: dicts with rec (from recommend). The n most confident, skipping -400 and worse
-    and coin flips (skipping coin flips cut the replay loss from -4.3% to -1.9% a bet)."""
-    ok = [c for c in cands if c["rec"] and c["rec"]["price"] >= TOP_MIN_PRICE and c["rec"]["conf"] != "Coin flip"]
-    ok.sort(key=lambda c: ((c["rec"]["rate"] or 0), c["rec"]["p_cover"]), reverse=True)
+    """The day's n most confident picks, at any price, as long as the track record for
+    calls that sure keeps up with the price. A -400 favorite needs 80% to break even, so it
+    only makes it if calls that sure were right about 78%+ of the time. Coin flips are out.
+    (Replay: -0.8% a bet, 71% hit, vs -1.1% with a fixed -250 cutoff and -4.3% with no rules.)"""
+    from .model import implied
+    ok = [c for c in cands if c["rec"] and c["rec"]["conf"] != "Coin flip" and c["rec"]["rate"] is not None
+          and c["rec"]["rate"] - implied(c["rec"]["price"]) >= -TOP_SLACK]
+    ok.sort(key=lambda c: (c["rec"]["rate"], c["rec"]["p_cover"]), reverse=True)
     return ok[:n]
 
 

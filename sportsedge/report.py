@@ -155,7 +155,7 @@ def top5(con, leagues, data, tz):
     top2 = summ([p for p in picks if p["rank"] <= 2])
     by_lg = {k: summ([p for p in picks if p["lg"] == k]) for k in [lg.key for lg in leagues]}
     live_s = summ([{"res": r["result"], "profit": r["profit"] or 0, "rec": {"price": r["first_price"]}} for r in live])
-    return {"days": days, "min_price": REC.TOP_MIN_PRICE, "n": REC.TOP_N,
+    return {"days": days, "slack": REC.TOP_SLACK, "n": REC.TOP_N,
             "replay": {"all": summ(picks), "top2": top2, "by_rank": by_rank, "by_league": by_lg,
                        "days": len({p["day"] for p in picks})},
             "live": live_s}
