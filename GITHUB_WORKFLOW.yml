@@ -40,7 +40,12 @@ jobs:
       - name: Load saved data
         run: |
           if git fetch --depth 1 origin data 2>/dev/null; then
-            git show origin/data:sportsedge.db > sportsedge.db || true
+            # saved compressed (GitHub caps files at 100 MB); older saves were plain
+            if git cat-file -e origin/data:sportsedge.db.gz 2>/dev/null; then
+              git show origin/data:sportsedge.db.gz | gunzip > sportsedge.db
+            else
+              git show origin/data:sportsedge.db > sportsedge.db || true
+            fi
           fi
           ls -la sportsedge.db 2>/dev/null || echo "First run: starting a new database"
           [ -f config.ini ] || cp config.example.ini config.ini
@@ -50,12 +55,13 @@ jobs:
 
       - name: Save data
         run: |
-          mkdir -p /tmp/data && cp sportsedge.db /tmp/data/
+          mkdir -p /tmp/data && gzip -9 -c sportsedge.db > /tmp/data/sportsedge.db.gz
+          ls -la /tmp/data
           cd /tmp/data
           git init -q -b data
           git config user.name "sportsedge-bot"
           git config user.email "sportsedge-bot@users.noreply.github.com"
-          git add sportsedge.db
+          git add sportsedge.db.gz
           git commit -q -m "Data update $(date -u +%Y-%m-%dT%H:%MZ)"
           git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data:data
 
