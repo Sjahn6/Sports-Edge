@@ -286,6 +286,7 @@ th[data-tip]{cursor:help}
     <div class="note" id="bets-note"></div>
     <div class="controls">
       <label>Market <select id="b-mkt"><option value="">All bet types</option><option value="spread">Spreads</option><option value="total">Totals</option><option value="moneyline">Moneylines</option></select></label>
+      <label>Show <select id="b-show"><option value="">Picks only (1 per game)</option><option value="all">Every +EV bet</option></select></label>
       <label>Min EV <select id="b-ev"><option value="0.02">2%</option><option value="0.03">3%</option><option value="0.05">5%</option><option value="0">Show all</option></select></label>
     </div>
     <div class="panel tablewrap"><table id="t-bets"></table></div>
@@ -331,6 +332,8 @@ function useLeague(k){   // the helpers below read these, so switch them per lea
 }
 useLeague(CUR);
 const SPORTC = {nfl:"#1f7a45", nba:"#e8710a", nhl:"#1b6fb8"};
+const MKT_OF = {home_ml:"moneyline", away_ml:"moneyline", home:"spread", away:"spread", over:"total", under:"total"};
+const SIDE_OF = {home_ml:"home", away_ml:"away", home:"home", away:"away", over:"over", under:"under"};
 const FALLBACK = ["#1d428a","#c8102e","#006847","#552583","#f58426","#00788c","#860038","#0b2265","#ffb612","#4f2683","#002b5c","#e03a3e"];
 function hexRgb(h){ h = h.replace("#",""); return [0,2,4].map(i=>parseInt(h.slice(i,i+2),16)); }
 function textOn(h){   // white or navy, whichever reads better on this team color
@@ -460,6 +463,7 @@ function betLabel(g,p){
   if (p.market==="spread"){ const t = p.side==="home"?abbr(g,"home"):abbr(g,"away"); return `${t} ${line(p.point)}`; }
   return `${p.side==="over"?"Over":"Under"} ${num(p.point,1).replace(/\.0$/,"")}`;
 }
+const SHOWALL = () => { const el = document.getElementById("b-show"); return el && el.value === "all"; };
 function allPlays(minEv, mkt){
   const out = [];
   const now = new Date().toISOString();
@@ -469,9 +473,9 @@ function allPlays(minEv, mkt){
       const b = g.best[k]; if (!b) continue;
       if (mkt && market!==mkt) continue;
       if (b.ev < minEv) continue;
-      const bench = (D.cfg.benched||[]).includes(market);
-      if (bench && mkt !== market) continue;   // benched bet types only show when picked in the filter
-      const p = {...b, side, market, key:k, bench};
+      const isPick = !!playOf(g, k), nw = isPick ? null : notPickWhy(g, k);
+      if (!isPick && !(SHOWALL() && nw)) continue;   // Picks only unless "every +EV bet" is chosen
+      const p = {...b, side, market, key:k, bench: !isPick, why: nw};
       const edgePts = market==="moneyline" ? null : market==="spread"
         ? (side==="home" ? g.exp_margin + p.point : -g.exp_margin + p.point)
         : (side==="over" ? g.exp_total - p.point : p.point - g.exp_total);
@@ -484,7 +488,7 @@ function drawBets(){
   const rows = allPlays(+$("#b-ev").value, $("#b-mkt").value);
   table($("#t-bets"), [
     {k:"bet",h:"Bet",v:r=>betLabel(r.g,r.p),f:r=>`<b>${esc(betLabel(r.g,r.p))} ${price(r.p.price)}</b>` +
-      (r.p.bench ? ` <span class="pill pass">Bench: Lean only</span>` : "") +
+      (r.p.bench ? ` <span class="pill pass" title="${esc(r.p.why ? r.p.why.txt : "")}">${WHYPILL[r.p.why && r.p.why.code] || "Lean"}</span>` : "") +
       (qbFlag(r.g) ? ` <span class="pill warnp">${esc(qbFlag(r.g))}</span>` : "") +
       (r.edgePts != null && Math.abs(r.edgePts) >= D.warn_gap ? ` <span class="pill warnp" title="Model and market disagree a lot. Check injuries and lineup news first.">check news</span>` : "") +
       `<div class="small">${esc(abbr(r.g,"away"))} @ ${esc(abbr(r.g,"home"))} · ${when(r.g.kickoff)}</div>`},
@@ -495,7 +499,7 @@ function drawBets(){
     {k:"why",h:"",v:()=>0,f:r=>`<button class="linkbtn" onclick="openWhy('${r.g.id}','${r.p.key}')">Why</button>`},
   ], rows, "ev");
 }
-$("#b-ev").onchange = drawBets; $("#b-mkt").onchange = drawBets;
+$("#b-ev").onchange = drawBets; $("#b-mkt").onchange = drawBets; $("#b-show").onchange = drawBets;
 if (!D.board.length) $("#t-bets").innerHTML = `<tr><td class="empty">No upcoming games in the next 8 days.</td></tr>`; else drawBets();
 
 // ---------- games
@@ -507,13 +511,10 @@ function winBar(g){
 }
 const KEYLABEL = {home_ml:"home", away_ml:"away"};
 function pickFor(g, keepStarted){
-  // your style first: a moneyline favorite in the price range, then the best EV play
   if (!keepStarted && g.kickoff <= new Date().toISOString()) return null;   // started: no new pick to bet
-  const ok = k => g.best[k] && !(D.cfg.benched||[]).includes(MKT_OF[k]) && g.best[k].ev >= D.cfg.min_ev && (g.best[k].p_cover - M_implied(g.best[k].price)) >= (D.cfg.min_edge ?? 0.03);
-  const band = ["home_ml","away_ml"].filter(k => ok(k) && g.best[k].price <= D.cfg.band_high && g.best[k].price >= D.cfg.band_low);
-  const all = ["home_ml","away_ml","home","away","over","under"].filter(ok).sort((a,b)=>g.best[b].ev-g.best[a].ev);
-  const key = band.sort((a,b)=>g.best[b].ev-g.best[a].ev)[0] || all[0];
-  return key ? {key, b: g.best[key], others: all.filter(k=>k!==key)} : null;
+  // the one Pick per game the model chose (biggest edge, underdogs, no benched bet types)
+  const key = ["home_ml","away_ml","home","away","over","under"].find(k => g.best[k] && playOf(g, k));
+  return key ? {key, b: g.best[key], others: []} : null;
 }
 function leanFor(g){
   // no pick: the bet the model likes most against its price (biggest win-chance edge).
@@ -702,8 +703,6 @@ function matchupHtml(g){
     ${row("Away / home", `${a.aw}-${a.al} away`, `${h.hw}-${h.hl} home`)}
   </div>`;
 }
-const MKT_OF = {home_ml:"moneyline", away_ml:"moneyline", home:"spread", away:"spread", over:"total", under:"total"};
-const SIDE_OF = {home_ml:"home", away_ml:"away", home:"home", away:"away", over:"over", under:"under"};
 function lineMove(g, k){
   // where the line was when the site first flagged this bet, vs now
   const pl = [...(g.plays||[]), ...(g.benched_plays||[])].find(p => p.market===MKT_OF[k] && p.side===SIDE_OF[k]);
@@ -721,6 +720,19 @@ function lineMove(g, k){
     ? {cls:"pos", txt:`Flagged at ${was}, now ${now}. The market moved toward this bet, a good sign.`}
     : {cls:"neg", txt:`Flagged at ${was}, now ${now}. The line moved the other way. Still a play at the new number, but less of one.`};
 }
+function playOf(g, k){ return (g.plays||[]).find(p => p.market===MKT_OF[k] && p.side===SIDE_OF[k]); }
+function notPickWhy(g, k){
+  const x = (g.benched_plays||[]).find(p => p.market===MKT_OF[k] && p.side===SIDE_OF[k]);
+  if (!x) return null;
+  const pk = (g.plays||[])[0];
+  const pkName = pk ? pickLabel(g, Object.keys(MKT_OF).find(kk => MKT_OF[kk]===pk.market && SIDE_OF[kk]===pk.side)) : "";
+  return {code: x.why_not, txt: {
+    bench: `Would be a Pick, but ${MKT_OF[k]==="total"?"total":MKT_OF[k]} bets are on the bench until they beat the closing line. See Model check.`,
+    favorite: "The model likes this favorite, but favorites it liked lost money over the last two seasons (−17% per bet), so it stays a Lean.",
+    second: `Also a good bet, but the Pick on this game is ${pkName}: it has the bigger edge. One Pick per game.`,
+  }[x.why_not] || ""};
+}
+const WHYPILL = {bench:"Bench: Lean only", favorite:"Favorite: Lean only", second:"2nd choice: Lean"};
 function marketSuggestions(g){
   // the model's side in each market: moneyline, spread (puck line), total
   const out = [];
@@ -729,12 +741,10 @@ function marketSuggestions(g){
     if (!opts.length) continue;
     const k = opts.sort((a,b)=>(g.best[b].p_cover - M_implied(g.best[b].price)) - (g.best[a].p_cover - M_implied(g.best[a].price)))[0];
     const b = g.best[k], ed = b.p_cover - M_implied(b.price);
-    const mkt = MKT_OF[k], bench = (D.cfg.benched||[]).includes(mkt);
-    const strong = b.ev >= D.cfg.min_ev && ed >= (D.cfg.min_edge ?? 0.03);
-    const isPick = strong && !bench;
+    const isPick = !!playOf(g, k), nw = isPick ? null : notPickWhy(g, k);
     const tier = isPick ? ["Pick","go"] : ed > 0.005 ? ["Lean",""] : ["Pass","pass"];
     const r = reasonsFor(g, k)[0];
-    out.push({label, k, b, ed, tier, r, benchNote: strong && bench, move: lineMove(g, k)});
+    out.push({label, k, b, ed, tier, r, benchNote: nw && nw.txt, move: lineMove(g, k)});
   }
   return out;
 }
@@ -745,7 +755,7 @@ function marketsHtml(g){
       <div class="mk-l">${esc(m.label)}</div>
       <div class="mk-b"><b>${esc(pickLabel(g, m.k))}</b> <span class="pill ${m.tier[1]}">${m.tier[0]}</span>
         <div class="small">${pct(m.b.p_cover,0)} to win · edge ${sgn(m.ed*100,0)}%${m.r ? " · " + esc(m.r) : ""}</div>
-        ${m.benchNote ? `<div class="small">Would be a Pick, but ${m.label.toLowerCase()} bets are on the bench until they beat the closing line. See Model check.</div>` : ""}
+        ${m.benchNote ? `<div class="small">${esc(m.benchNote)}</div>` : ""}
         ${m.move ? `<div class="small ${m.move.cls}">${esc(m.move.txt)}</div>` : ""}</div>
     </div>`).join("") + `</div>`;
 }
@@ -819,7 +829,7 @@ $("#g-grid").innerHTML = D.board.length ? D.board.map(cardHtml).join("") : `<div
   const tp = D.cfg.target_price, lo = D.cfg.band_low, hi = D.cfg.band_high;
   document.querySelectorAll(".tp").forEach(e=>e.textContent = price(tp));
   $("#ch-note").innerHTML = `Laying ${price(tp)} means risking $${-tp} to win $100, so you need to win <b>${pct(M_implied(tp))}</b> of the time to break even. ` +
-    `This tab shows moneylines priced ${price(hi)} to ${price(lo)} where the model's win chance beats the price. Higher win rate, smaller payouts, and one loss erases about two wins, so the cushion matters more than the win rate.`;
+    `This tab shows moneylines priced ${price(hi)} to ${price(lo)} where the model's win chance beats the price. Higher win rate, smaller payouts, and one loss erases about two wins, so the cushion matters more than the win rate.<br><b>Heads up:</b> over the last two seasons, favorites in this range that the model liked won 64% of the time but still lost money (about −4% per bet), so the site no longer calls them Picks. This tab is for reference.`;
   function rowsFor(onlyPos){
     const out = [];
     for (const g of D.board) for (const side of ["home","away"]){

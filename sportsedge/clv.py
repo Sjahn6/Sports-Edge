@@ -176,11 +176,9 @@ def recent(con, league, limit=60):
 
 
 def bench(board, st):
-    """Move flagged bets in benched bet types out of Picks (they're still tracked)."""
+    """One Pick per game (see board.select_picks). Benched bet types, favorites and
+    second choices become Leans; they're still tracked against the close."""
     off = {m for m, v in st.items() if v["state"] == "benched"}
     for g in board:
-        keep, moved = [], []
-        for pl in g["plays"]:
-            (moved if pl["market"] in off else keep).append(dict(pl, benched=pl["market"] in off))
-        g["plays"], g["benched_plays"] = keep, moved
+        g["plays"], g["benched_plays"] = B.select_picks(g["plays"], off)
     return sorted(off)

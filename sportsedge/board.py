@@ -251,6 +251,37 @@ def evaluate_game(g, ratings, quotes, league, cfg, inj=None, form=None, rest=Non
     return out
 
 
+def is_favorite(pl):
+    """Laying points or a minus moneyline. Totals have no favorite."""
+    if pl["market"] == "moneyline":
+        return pl["price"] < 0
+    if pl["market"] == "spread":
+        return (pl["point"] or 0) < 0
+    return False
+
+
+def select_picks(plays, benched=()):
+    """The one recommendation per game, from what two seasons of real closing lines
+    showed: favorites the model likes more than DraftKings lost (-17% per bet) while
+    underdogs it likes made money (+4%), and one bet per game with the biggest
+    win-chance edge did best (+8%). Returns (picks, others with the reason)."""
+    reason = {}
+    for pl in plays:
+        if pl["market"] in benched:
+            reason[id(pl)] = "bench"
+        elif is_favorite(pl):
+            reason[id(pl)] = "favorite"
+    cands = [pl for pl in plays if id(pl) not in reason]
+    best = max(cands, key=lambda pl: pl["p_cover"] - M.implied(pl["price"])) if cands else None
+    picks = [best] if best else []
+    others = []
+    for pl in plays:
+        if pl is best:
+            continue
+        others.append(dict(pl, benched=True, why_not=reason.get(id(pl), "second")))
+    return picks, others
+
+
 def short(g, side):
     from .util import nickname
     return g.get(side + "_short") or nickname(g[side]) or g.get(side + "_abbr") or g[side]

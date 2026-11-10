@@ -76,6 +76,8 @@ def run(con, league, cfg, season, preds=None):
             if not close:
                 continue
             ev = B.evaluate_game(g, p["ratings"], close, league, pcfg)
+            picks, _ = B.select_picks(ev["plays"], set(cfg.get("benched") or []))
+            pick_ids = {id(x) for x in picks}
             for pl in ev["plays"]:
                 outcome, profit = _grade(pl, margin, total)
                 bets.append({"season": p["season"], "week": g["week"] or g["date_utc"][5:10],
@@ -87,7 +89,7 @@ def run(con, league, cfg, season, preds=None):
                                        else (" " + (f"{pl['point']:+g}" if pl["point"] else "PK"))))
                                       if pl["side"] in ("home", "away")
                                       else f'{pl["side"].title()} {pl["point"]:g}',
-                             "result": outcome, "profit": profit})
+                             "result": outcome, "profit": profit, "pick": id(pl) in pick_ids})
 
     def mae_pair(rs, kp, kt):
         ps = [r for r in rs if r["market_" + kt] is not None]
@@ -102,7 +104,7 @@ def run(con, league, cfg, season, preds=None):
     # grade under today's rules: bet types on the bench (see clv.py) aren't Picks
     benched = set(cfg.get("benched") or [])
     all_bets = bets
-    bets = [b for b in all_bets if b["market"] not in benched]
+    bets = [b for b in all_bets if b["pick"]]   # one per game, no favorites, no benched types
 
     seasons = []
     for s in sorted({r["season"] for r in rows}):
