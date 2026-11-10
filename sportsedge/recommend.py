@@ -61,6 +61,7 @@ def conf_word(rate):
 
 TOP_N = 5
 TOP_SLACK = 0.02   # a pick qualifies if calls this sure were right within 2 points of what its price needs, or better
+TOP_MIN_PRICE = -250   # Sean: nothing worse than -250; heavier favorites are easy calls he can make himself
 
 
 def top_rank(cands, n=TOP_N):
@@ -70,6 +71,7 @@ def top_rank(cands, n=TOP_N):
     (Replay: -0.8% a bet, 71% hit, vs -1.1% with a fixed -250 cutoff and -4.3% with no rules.)"""
     from .model import implied
     ok = [c for c in cands if c["rec"] and c["rec"]["conf"] != "Coin flip" and c["rec"]["rate"] is not None
+          and c["rec"]["price"] >= TOP_MIN_PRICE
           and c["rec"]["rate"] - implied(c["rec"]["price"]) >= -TOP_SLACK]
     ok.sort(key=lambda c: (c["rec"]["rate"], c["rec"]["p_cover"]), reverse=True)
     return ok[:n]
