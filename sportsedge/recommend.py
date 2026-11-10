@@ -60,7 +60,7 @@ def conf_word(rate):
 
 
 TOP_N = 5
-TOP_MIN_PRICE = -400   # heavier favorites win often but one loss wipes out 4+ wins; they lost the most in the replay
+TOP_MIN_PRICE = -250   # Sean: nothing worse than -250, those are easy calls that pay too little
 
 
 def top_rank(cands, n=TOP_N):
