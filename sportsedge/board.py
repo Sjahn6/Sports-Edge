@@ -132,7 +132,7 @@ def build_game(league, cfg, ratings, g, quotes, adj_margin=0.0, adj_total=0.0, a
     return model, GD.NormalGame(em, et, league.margin_sd, league.total_sd, win_sd), mkt_spread, mkt_total
 
 
-def evaluate_game(g, ratings, quotes, league, cfg, inj=None, form=None, rest=None):
+def evaluate_game(g, ratings, quotes, league, cfg, inj=None, form=None, rest=None, wx=None):
     """inj: injuries.game_adjustment() result, or None (backtest has no history).
     form: {team: {"last3": avg margin, "season": avg margin, "n": games}}
     rest: {"home": penalty, "away": penalty} for back to backs."""
@@ -143,6 +143,9 @@ def evaluate_game(g, ratings, quotes, league, cfg, inj=None, form=None, rest=Non
     base_total = ratings.total(g["home"], g["away"], neutral)
     inj_margin = inj["margin"] if inj else 0.0
     inj_total = inj["total"] if inj else 0.0
+    from . import weather as WX
+    wx_adj, wx_why = WX.adjustment(wx)
+    inj_total += wx_adj
     rest = rest or {"home": 0.0, "away": 0.0}
     rest_margin = -rest["home"] + rest["away"]
     # per team scoring shifts (used directly by the goals model)
@@ -239,6 +242,9 @@ def evaluate_game(g, ratings, quotes, league, cfg, inj=None, form=None, rest=Non
                  "over": best(total_rows, "over"), "under": best(total_rows, "under"),
                  "home_ml": best(ml_rows, "home"), "away_ml": best(ml_rows, "away")},
         "plays": plays,
+        "weather": None if wx is None and g.get("indoor") != 1 else {
+            "indoor": g.get("indoor") == 1, "adj": wx_adj, "why": wx_why,
+            **({k: wx.get(k) for k in ("temp_f", "wind_mph", "gust_mph", "precip_prob", "precip_in", "snow_in")} if wx else {})},
         "disagree": None if mkt_spread is None or league.model == "poisson" else abs(-model_margin - mkt_spread),
         "injuries": None if not inj else {"home": inj["home"]["players"], "away": inj["away"]["players"],
                                           "home_off": inj["home"]["off"], "home_def": inj["home"]["def"],
@@ -481,7 +487,14 @@ def build_board(con, league, cfg, ratings, now, days_ahead=8, season=None):
     for g in games:
         inj = INJ.game_adjustment(con, league.key, season, g, icfg, use) if use else None
         rest = back_to_back(con, league, g)
-        out.append(evaluate_game(g, ratings, latest_quotes(con, g["id"]), league, cfg, inj, form, rest))
+        wx = None
+        if league.key == "nfl":
+            try:
+                r = con.execute("SELECT * FROM weather WHERE game_id=?", (g["id"],)).fetchone()
+                wx = dict(r) if r else None
+            except Exception:
+                wx = None
+        out.append(evaluate_game(g, ratings, latest_quotes(con, g["id"]), league, cfg, inj, form, rest, wx))
     return out
 
 

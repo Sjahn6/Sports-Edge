@@ -6,6 +6,7 @@ from . import backtest as BT
 from . import board as B
 from . import calibration as CAL
 from . import clv as CLV
+from . import recommend as REC
 from . import db as D
 from . import model as M
 from .leagues import season_for
@@ -27,15 +28,7 @@ def build_data(con, league, cfg, tz):
     clv = CLV.status(con, league)
     board = B.build_board(con, league, cfg, ratings, now, season=season)
     cfg = dict(cfg, benched=CLV.bench(board, clv))
-    CLV.record(con, league, board, now_iso)
-    first = {(r["game_id"], r["market"], r["side"]): r for r in B.rows(
-        con, "SELECT game_id, market, side, first_point, first_price, first_utc FROM tracked WHERE league=?",
-        (league.key,))}
-    for g in board:
-        for pl in g["plays"] + g["benched_plays"]:
-            f = first.get((g["id"], pl["market"], pl["side"]))
-            if f:
-                pl["first_point"], pl["first_price"], pl["first_utc"] = f["first_point"], f["first_price"], f["first_utc"]
+    bt = BT.run(con, league, cfg, season, preds)
     inj_rows = B.rows(con, "SELECT team, player, position, status, detail, comment, date FROM injuries "
                            "WHERE league=? ORDER BY team, player", (league.key,))
     impact = {}
@@ -51,7 +44,6 @@ def build_data(con, league, cfg, tz):
         r["chance"] = p["chance"] if p else None
     teams = B.team_table(con, league, season, ratings)
     players = B.player_data(con, league, season)
-    bt = BT.run(con, league, cfg, season, preds)
     n_games = con.execute("SELECT COUNT(*) FROM games WHERE league=? AND season=? AND completed=1",
                           (league.key, season)).fetchone()[0]
     return {
@@ -68,7 +60,32 @@ def build_data(con, league, cfg, tz):
         "calibration": calib,
         "board": board, "teams": teams, "players": players, "backtest": bt,
         "clv": {"status": clv, "recent": CLV.recent(con, league), "min_n": CLV.MIN_N},
+        "weather_pulled": D.get_meta(con, f"{league.key}:weather_pulled"),
+        "weather_error": D.get_meta(con, f"{league.key}:weather_error"),
     }
+
+
+def finish(con, leagues, data):
+    """Recommended bet per game (needs every sport's track record for small groups),
+    then save today's flagged and recommended bets for tracking."""
+    now_iso = now_utc().isoformat(timespec="seconds")
+    pooled = REC.pool([data["leagues"][lg.key]["backtest"]["calls"] for lg in leagues])
+    for lg in leagues:
+        L = data["leagues"][lg.key]
+        for g in L["board"]:
+            g["rec"] = REC.recommend(g, L["backtest"]["calls"], lg.key, pooled)
+        CLV.record(con, lg, L["board"], now_iso)
+        first = {(r["game_id"], r["market"], r["side"]): r for r in B.rows(
+            con, "SELECT game_id, market, side, first_point, first_price, first_utc FROM tracked WHERE league=?",
+            (lg.key,))}
+        for g in L["board"]:
+            for pl in g["plays"] + g["benched_plays"]:
+                f = first.get((g["id"], pl["market"], pl["side"]))
+                if f:
+                    pl["first_point"], pl["first_price"], pl["first_utc"] = f["first_point"], f["first_price"], f["first_utc"]
+        L["recs"] = {"status": CLV.rec_status(con, lg),
+                     "recent": [{k: r[k] for k in ("label", "game", "kickoff", "market", "first_price", "first_point",
+                                                   "first_p", "result", "profit")} for r in CLV.rec_rows(con, lg)[:60]]}
 
 
 def write(con, leagues, cfg, tz, out_path):
@@ -77,6 +94,7 @@ def write(con, leagues, cfg, tz, out_path):
     data = {"generated": now_utc().isoformat(timespec="seconds"), "tz": tz,
             "order": [lg.key for lg in leagues],
             "leagues": {lg.key: build_data(con, lg, cfg, tz) for lg in leagues}}
+    finish(con, leagues, data)
     html = TEMPLATE.read_text(encoding="utf-8")
     payload = json.dumps(data, default=float).replace("</", "<\\/")
     html = html.replace("/*__DATA__*/null", payload)

@@ -48,6 +48,9 @@ _OTHER = {"home": "away", "away": "home", "over": "under", "under": "over"}
 
 def ensure(con):
     con.executescript(SCHEMA)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(tracked)")}
+    if "rec_utc" not in cols:   # when the site last made this its recommended bet for the game
+        con.execute("ALTER TABLE tracked ADD COLUMN rec_utc TEXT")
 
 
 def _label(g, pl):
@@ -78,7 +81,40 @@ def record(con, league, board, now_iso):
                 (league.key, g["id"], pl["market"], pl["side"], _label(gd, pl),
                  f'{g["away_short"]} @ {g["home_short"]}', g["kickoff"], pl["book"], now_iso,
                  pl["point"], pl["price"], pl["p_cover"], pl["ev"], tier, now_iso, pl["point"], pl["price"]))
+        r = g.get("rec")
+        if r:
+            con.execute(
+                "INSERT INTO tracked (league, game_id, market, side, label, game, kickoff, book, first_utc, "
+                "first_point, first_price, first_p, first_ev, tier, last_utc, last_point, last_price, rec_utc) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(league, game_id, market, side) DO UPDATE SET rec_utc=excluded.rec_utc, "
+                "last_utc=excluded.last_utc, last_point=excluded.last_point, last_price=excluded.last_price",
+                (league.key, g["id"], r["market"], r["side"], _label(gd, r),
+                 f'{g["away_short"]} @ {g["home_short"]}', g["kickoff"], r["book"], now_iso,
+                 r["point"], r["price"], r["p_cover"], r["ev"], "Rec", now_iso, r["point"], r["price"], now_iso))
     con.commit()
+
+
+def rec_rows(con, league):
+    """The final recommended bet for each game (the last one made before kickoff)."""
+    ensure(con)
+    rows = B.rows(con, "SELECT * FROM tracked WHERE league=? AND rec_utc IS NOT NULL ORDER BY rec_utc", (league.key,))
+    last = {}
+    for r in rows:
+        last[r["game_id"]] = r
+    return sorted(last.values(), key=lambda r: r["kickoff"], reverse=True)
+
+
+def rec_status(con, league):
+    rs = [r for r in rec_rows(con, league) if r["result"] in ("W", "L", "P")]
+    out = {"n": len(rs), "w": sum(r["result"] == "W" for r in rs), "l": sum(r["result"] == "L" for r in rs),
+           "p": sum(r["result"] == "P" for r in rs), "units": sum(r["profit"] or 0 for r in rs),
+           "exp": sum(r["first_p"] or 0 for r in rs), "by_market": {}}
+    for m in ("moneyline", "spread", "total"):
+        x = [r for r in rs if r["market"] == m]
+        out["by_market"][m] = {"n": len(x), "w": sum(r["result"] == "W" for r in x),
+                               "l": sum(r["result"] == "L" for r in x), "units": sum(r["profit"] or 0 for r in x)}
+    return out
 
 
 def _gained(market, side, ours, close):
@@ -144,7 +180,8 @@ def status(con, league):
     ensure(con)
     out = {}
     for m in ("moneyline", "spread", "total"):
-        rs = B.rows(con, "SELECT clv, result, profit FROM tracked WHERE league=? AND market=? AND clv IS NOT NULL",
+        rs = B.rows(con, "SELECT clv, result, profit FROM tracked WHERE league=? AND market=? AND clv IS NOT NULL "
+                         "AND tier IN ('Pick', 'Lean')",
                     (league.key, m))
         n = len(rs)
         # each bet capped at +/-15% so one news driven line move can't swing the average

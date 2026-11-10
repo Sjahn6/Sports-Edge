@@ -49,6 +49,16 @@ def cmd_update(cp, args, odds=True):
                 PL.update_injuries(con, lg)
         except Exception as e:
             PL.log(f"  ! injuries: {e}")
+        try:
+            if not args.lines_only:
+                from sportsedge import weather as WX
+                n = WX.update_weather(con, lg)
+                if n:
+                    PL.log(f"  {lg.name} weather: {n} outdoor games")
+        except Exception as e:
+            PL.log(f"  ! weather: {e}")
+            D.set_meta(con, f"{lg.key}:weather_error", str(e)[:300])
+            con.commit()
         if odds and not args.no_odds and "oddsapi" in cp.get("odds", "source"):
             try:
                 PL.update_odds(con, lg, cp)

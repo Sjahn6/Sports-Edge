@@ -294,12 +294,12 @@ th[data-tip]{cursor:help}
     <div class="note" id="bets-note"></div>
     <div class="controls">
       <label>Market <select id="b-mkt"><option value="">All bet types</option><option value="spread">Spreads</option><option value="total">Totals</option><option value="moneyline">Moneylines</option></select></label>
-      <label>Show <select id="b-show"><option value="">Picks only (1 per game)</option><option value="all">Every +EV bet</option></select></label>
+      <label>Show <select id="b-show"><option value="ours">Our picks (1 per game, any odds)</option><option value="">Best price picks</option><option value="all">Every +EV bet</option></select></label>
       <label>Min EV <select id="b-ev"><option value="0.02">2%</option><option value="0.03">3%</option><option value="0.05">5%</option><option value="0">Show all</option></select></label>
     </div>
     <div class="panel tablewrap"><table id="t-bets"></table></div>
   </section>
-  <section id="games"><div class="legend"><span><span class="pill go">Pick</span> odds clearly in your favor</span><span><span class="pill">Lean</span> small edge, bet small or skip</span><span><span class="pill pass">Pass</span> fair price, no edge</span></div><div class="grid" id="g-grid"></div></section>
+  <section id="games"><div class="legend"><span><b>Our pick</b> = the bet we think is most likely to hit, any odds.</span><span><span class="pill go">Strong</span> calls this sure hit 72%+</span><span><span class="pill go">Confident</span> 62 to 72%</span><span><span class="pill">Lean</span> 55 to 62%</span><span><span class="pill">Coin flip</span> under 55%</span></div><div class="grid" id="g-grid"></div></section>
   <section id="injuries">
     <p class="small" id="inj-sub"></p>
     <div class="controls">
@@ -472,9 +472,18 @@ function betLabel(g,p){
   return `${p.side==="over"?"Over":"Under"} ${num(p.point,1).replace(/\.0$/,"")}`;
 }
 const SHOWALL = () => { const el = document.getElementById("b-show"); return el && el.value === "all"; };
+const SHOWOURS = () => { const el = document.getElementById("b-show"); return !el || el.value === "ours"; };
 function allPlays(minEv, mkt){
   const out = [];
   const now = new Date().toISOString();
+  if (SHOWOURS()){
+    for (const g of D.board){
+      const k = recKey(g); if (!k || g.kickoff <= now) continue;
+      if (mkt && MKT_OF[k] !== mkt) continue;
+      out.push({g, p: {...g.best[k], side: SIDE_OF[k], market: MKT_OF[k], key: k, bench: false, rec: g.rec}, edgePts: null});
+    }
+    return out;
+  }
   for (const g of D.board){
     if (g.kickoff <= now) continue;   // already started: the line is gone
     for (const [k, side, market] of [["home","home","spread"],["away","away","spread"],["over","over","total"],["under","under","total"],["home_ml","home","moneyline"],["away_ml","away","moneyline"]]){
@@ -501,11 +510,12 @@ function drawBets(){
       (r.edgePts != null && Math.abs(r.edgePts) >= D.warn_gap ? ` <span class="pill warnp" title="Model and market disagree a lot. Check injuries and lineup news first.">check news</span>` : "") +
       `<div class="small">${esc(abbr(r.g,"away"))} @ ${esc(abbr(r.g,"home"))} · ${when(r.g.kickoff)}</div>`},
     {k:"pc",h:"Win chance",n:1,v:r=>r.p.p_cover,f:r=>`<b>${pct(r.p.p_cover,0)}</b>`},
-    {k:"edge",h:"Edge",n:1,v:r=>r.p.p_cover-M_implied(r.p.price),f:r=>`<span class="pos"><b>${sgn((r.p.p_cover-M_implied(r.p.price))*100,0)}%</b></span>`},
+    {k:"edge",h:"Edge",n:1,v:r=>r.p.p_cover-M_implied(r.p.price),f:r=>{const e=r.p.p_cover-M_implied(r.p.price);return `<span class="${e>0?"pos":"neg"}"><b>${sgn(e*100,0)}%</b></span>`}},
     {k:"ev",h:"EV",n:1,v:r=>r.p.ev,f:r=>`<span class="pill ${r.p.ev>0?"go":""}">${sgn(r.p.ev*100)}%</span>`},
-    {k:"k",h:"Stake",n:1,v:r=>r.p.bench?0:r.p.kelly,f:r=>r.p.bench?`<span class="small">skip for now</span>`:`${pct(r.p.kelly,1)} <span class="small">of bankroll</span>`},
+    {k:"conf",h:"Confidence",v:r=>r.p.rec?(r.p.rec.rate??0):-1,f:r=>r.p.rec?`<span class="pill ${confCls(r.p.rec.conf)?"go":""}">${esc(r.p.rec.conf||"–")}</span> <span class="small">${r.p.rec.rate!=null?pct(r.p.rec.rate,0)+" hist.":""}</span>`:"–"},
+    {k:"k",h:"Stake",n:1,v:r=>r.p.bench?0:r.p.kelly,f:r=>r.p.rec?`<span class="small">1 unit, flat</span>`:r.p.bench?`<span class="small">skip for now</span>`:`${pct(r.p.kelly,1)} <span class="small">of bankroll</span>`},
     {k:"why",h:"",v:()=>0,f:r=>`<button class="linkbtn" onclick="openWhy('${r.g.id}','${r.p.key}')">Why</button>`},
-  ], rows, "ev");
+  ], rows, SHOWOURS() ? "conf" : "ev");
 }
 $("#b-ev").onchange = drawBets; $("#b-mkt").onchange = drawBets; $("#b-show").onchange = drawBets;
 if (!D.board.length) $("#t-bets").innerHTML = `<tr><td class="empty">No upcoming games in the next 8 days.</td></tr>`; else drawBets();
@@ -773,10 +783,20 @@ function pointsHtml(g, k){
 }
 
 // ---------- our call: the model's honest prediction for each market, price ignored
+function pooledBucket(market, p){
+  // the same confidence group across all three sports (winner calls only)
+  if (market !== "moneyline") return null;
+  let n = 0, right = 0;
+  for (const k of ALL.order){
+    const c = ((ALL.leagues[k].backtest||{}).calls||{})[market]; if (!c) continue;
+    const b = c.buckets.find(x => p >= x.lo && (p < x.hi || x.hi >= 1)); if (b){ n += b.n; right += b.right; }
+  }
+  return n >= 25 ? {n, right} : null;
+}
 function callRate(market, p){
   const c = (D.backtest.calls||{})[market]; if (!c || !c.n) return null;
   const b = c.buckets.find(x => p >= x.lo && (p < x.hi || x.hi >= 1)) ;
-  const use = b && b.n >= 25 ? b : null;   // small groups are noise: fall back to the overall rate
+  const use = b && b.n >= 25 ? b : pooledBucket(market, p);   // small groups borrow from all sports, else the overall rate
   return {rate: use ? use.right/use.n : c.right/c.n, n: use ? use.n : c.n, all: c.right/c.n, alln: c.n, grouped: !!use};
 }
 function confWord(rate){
@@ -806,8 +826,41 @@ function gameCalls(g){
 function callsHtml(g){
   const cs = gameCalls(g); if (!cs.length) return "";
   return `<div class="calls"><div class="ch"><span>Our call</span><span class="small" style="font-family:var(--body);text-transform:none;letter-spacing:0;font-weight:400">who we think wins, odds aside</span></div>` +
-    cs.map(c => `<div class="cr"><div class="cl">${esc(c.label)}</div><div class="cv">${esc(c.text)}${c.conf[0]?`<span class="conf ${c.conf[1]}">${c.conf[0]}</span>`:""}</div><div class="cp">${pct(c.p,0)}</div>
+    cs.map(c => `<div class="cr"><div class="cl">${esc(c.label)}</div><div class="cv">${c.k===recKey(g)?"★ ":""}${esc(c.text)}${c.conf[0]?`<span class="conf ${c.conf[1]}">${c.conf[0]}</span>`:""}</div><div class="cp">${pct(c.p,0)}</div>
       ${c.r ? `<div class="cn">${c.r.grouped ? `Calls this sure were right <b>${pct(c.r.rate,0)}</b> of the time` : `${c.label} calls were right <b>${pct(c.r.rate,0)}</b> of the time`} over the last two seasons (${c.r.n} games).</div>` : ""}</div>`).join("") + `</div>`;
+}
+
+// ---------- the recommended bet: what the analysis most believes will hit, at any price
+function recKey(g){ const r = g.rec; if (!r) return null; return Object.keys(MKT_OF).find(k => MKT_OF[k]===r.market && SIDE_OF[k]===r.side); }
+function confCls(w){ return w==="Strong" ? "s" : w==="Confident" ? "c" : ""; }
+function priceLine(pr){
+  if (pr == null) return "";
+  const need = M_implied(pr);
+  return pr < 0 ? `At ${price(pr)} you risk $${-pr} to win $100, so it has to hit ${pct(need,0)} of the time to break even.`
+                : `At ${price(pr)} a $100 bet wins $${pr}. It only has to hit ${pct(need,0)} of the time to break even.`;
+}
+function wxText(g){
+  const w = g.weather; if (!w) return "";
+  if (w.indoor) return "Indoors, no weather.";
+  if (w.temp_f == null) return "";
+  const bits = [`${Math.round(w.temp_f)}°F`, `${Math.round(w.wind_mph||0)} mph wind`];
+  if ((w.snow_in||0) > 0.02) bits.push("snow"); else if ((w.precip_prob||0) >= 30) bits.push(`${Math.round(w.precip_prob)}% rain`);
+  return `Kickoff weather: ${bits.join(", ")}` + (w.adj ? ` (total moved ${num(w.adj,1)} pts for ${w.why.join(" and ")}).` : ", no effect.");
+}
+function recHtml(g){
+  const r = g.rec, k = recKey(g); if (!r || !k) return `<div class="pick none">No DraftKings line saved yet.</div>`;
+  const vp = (g.plays||[])[0];
+  const vk = vp ? Object.keys(MKT_OF).find(x => MKT_OF[x]===vp.market && SIDE_OF[x]===vp.side) : null;
+  const why = whyText(g, k, false).replace(/ (The odds|The odds are)[^.]*\.$/, "");
+  return `<div class="pick">
+      <div class="pk-top"><span class="pk-tag">Our pick</span><b>${esc(pickLabel(g,k))}</b>${r.conf?`<span class="pill ${confCls(r.conf)?"go":""}">${esc(r.conf)}</span>`:""}</div>
+      <div class="pk-sub">Chance it hits <b>${pct(r.p_cover,0)}</b>${r.rate!=null?` · ${r.grouped?"calls this sure":"these calls"} were right <b>${pct(r.rate,0)}</b> over two seasons`:""}</div>
+      <div class="whyline"><b>Why:</b> ${esc(why)}</div>
+      ${wxText(g) ? `<div class="whyline">${esc(wxText(g))}</div>` : ""}
+      <div class="whyline"><b>Price:</b> ${esc(priceLine(r.price))}</div>
+      ${playPoints(g,k).some(x=>x[0]==="Heads up") ? `<div class="whyline" style="color:var(--warn)"><b>Heads up:</b> big gap vs DraftKings. Check injuries and lineups before betting.</div>` : ""}
+      ${vk && vk !== k ? `<div class="small">Best price on this game: ${esc(pickLabel(g, vk))} (the odds look most generous there, but it's less likely to hit).</div>` : ""}
+    </div>`;
 }
 function cardHtml(g){
   const bh=g.best.home, ba=g.best.away, bo=g.best.over, bu=g.best.under;
@@ -819,25 +872,7 @@ function cardHtml(g){
     return `<tr><td>${esc(s.title)}</td><td class="n">${line(s.away.point)} ${price(s.away.price)}</td><td class="n">${line(s.home.point)} ${price(s.home.price)}</td>`+
       `<td class="n">${t?`${num(t.over.point).replace(/\.0$/,"")} o${price(t.over.price)} u${price(t.under.price)}`:"–"}</td></tr>`;
   }).join("");
-  const pickHtml = pk ? `
-    <div class="pick">
-      <div class="pk-top"><span class="pk-tag">Pick</span><b>${esc(pickLabel(g,pk.key))}</b><span class="pill ${edgeLevel(g,pk.b).c}">${edgeLevel(g,pk.b).t}</span></div>
-      <div class="pk-sub" title="Win chance = how often SportsEdge thinks it wins. Edge = how much higher that is than this price requires.">Win chance <b>${pct(pk.b.p_cover,0)}</b> · Edge <b class="pos">${sgn((pk.b.p_cover-M_implied(pk.b.price))*100,0)}%</b></div>
-      <div class="whyline"><b>Why:</b> ${esc(whyText(g,pk.key,true))}</div>
-      ${playPoints(g,pk.key).some(x=>x[0]==="Heads up") ? `<div class="whyline" style="color:var(--warn)"><b>Heads up:</b> big gap vs DraftKings. Check injuries and lineups before betting.</div>` : ""}
-      ${pk.others.length ? `<div class="small">Also +EV: ${pk.others.map(k=>esc(pickLabel(g,k))).join(", ")}</div>` : ""}
-    </div>`
-    : (() => {
-      const ln = hasLines ? leanFor(g) : null;
-      if (!ln) return `<div class="pick none">No DraftKings line saved yet.</div>`;
-      const ed = ln.b.p_cover - M_implied(ln.b.price);
-      const isLean = ed > 0.005;
-      return `<div class="pick lean">
-        <div class="pk-top"><b>${esc(pickLabel(g,ln.key))}</b><span class="pill ${isLean?"":"pass"}">${isLean?"Lean":"Pass"}</span></div>
-        <div class="pk-sub">Win chance <b>${pct(ln.b.p_cover,0)}</b> · Edge <b class="${ed>0?"pos":"neg"}">${sgn(ed*100,0)}%</b></div>
-        <div class="whyline"><b>Why:</b> ${esc(whyText(g,ln.key,false))}</div>
-      </div>`;
-    })();
+  const pickHtml = hasLines ? recHtml(g) : `<div class="pick none">No DraftKings line saved yet.</div>`;
   const jc = teamColors(g);
   return `<div class="card" id="card-${g.id}"><div class="jersey"><i style="background:${jc.away}"></i><i style="background:${jc.home}"></i></div>
     <div class="top"><div class="teams">${esc(abbr(g,"away"))} @ ${esc(abbr(g,"home"))}</div><div class="when" style="white-space:nowrap">${new Date(g.kickoff).toLocaleString("en-US",{timeZone:tz,weekday:"short",hour:"numeric",minute:"2-digit"})}</div></div>
@@ -847,7 +882,7 @@ function cardHtml(g){
     ${matchupHtml(g)}
     ${hasLines ? callsHtml(g) : ""}
     ${pickHtml}
-    ${hasLines ? `<div class="mk-h">Every bet on this game</div>${marketsHtml(g)}` : ""}
+    ${hasLines ? `<div class="mk-h">Price check: every bet on this game <span class="small" style="font-weight:400">(Pick here = best price, not most likely)</span></div>${marketsHtml(g)}` : ""}
     <details class="more"><summary>Show details</summary>
     <div class="kv">
       <div class="h"></div><div class="h r">Model</div><div class="h r">DraftKings</div>
@@ -945,7 +980,7 @@ function M_implied(p){ return p < 0 ? -p/(-p+100) : 100/(p+100); }
 // ---------- injuries tab
 $("#inj-sub").textContent = D.injuries_pulled ? `ESPN injury report pulled ${when(D.injuries_pulled)}. Line impact is the projected hit to that team's margin in ${U}: player value x chance he sits x how much he's been playing.` : "No injury report pulled yet.";
 $("#bets-note").textContent = {
-  nfl: "The model knows scores, injuries and the market, but not weather or late quarterback news, so a huge edge usually means the book knows something. ",
+  nfl: "The model knows scores, recent form, injuries, rest, kickoff weather and the market, but not late lineup news, so a huge gap from DraftKings usually means the book knows something. ",
   nba: "The model knows scores, injuries, back to backs and the market, but not late scratches or rest days announced near tip, so check lineups before betting. ",
   nhl: "The model knows goals, injuries, back to backs and the market, but not who's starting in goal until it's on the injury report, so check the starting goalies before betting. ",
 }[D.key] + "Start with small stakes and watch the Model check tab before trusting it. At standard −110 pricing you need to win 52.4% just to break even.";
@@ -1026,7 +1061,12 @@ if (P.length) drawPlayers(); else $("#t-players").innerHTML = `<tr><td class="em
   const unitsCls = u => u > 0 ? "pos" : u < 0 ? "neg" : "";
   const C = D.clv, ml0 = {moneyline:"Moneyline", spread: D.key==="nhl"?"Puck line":"Spread", total:"Total"};
   const stPill = x => x.state === "benched" ? `<span class="pill pass">Bench: Lean only</span>` : `<span class="pill go">Picks on</span>`;
-  let h = `<h2>Beat the closing line <span class="small" style="font-family:var(--body);font-weight:400">live picks, from the day tracking started</span></h2>
+  const RS = (D.recs||{}).status || {n:0};
+  let h = `<h2>Our picks, live <span class="small" style="font-family:var(--body);font-weight:400">the one recommended bet per game, from Nov 10</span></h2>` +
+    (RS.n ? `<div class="tiles"><div class="tile"><div class="l">Record</div><div class="v">${RS.w}-${RS.l}${RS.p?`-${RS.p}`:""}</div><div class="s">${pct(RS.w/Math.max(1,RS.w+RS.l),0)} hit · expected ${pct(RS.exp/Math.max(1,RS.n),0)}</div></div>
+      <div class="tile"><div class="l">Units, 1 per pick</div><div class="v ${RS.units>0?"pos":RS.units<0?"neg":""}">${sgn(RS.units,1)}</div><div class="s">${sgn(RS.units/Math.max(1,RS.n)*100,1)}% per bet</div></div></div>`
+      : `<div class="panel"><div class="empty">Tracking started today. Picks show up here after their games end.</div></div>`);
+  h += `<h2>Beat the closing line <span class="small" style="font-family:var(--body);font-weight:400">live picks, from the day tracking started</span></h2>
   <p class="small">Each flagged bet is saved at the number it was first shown. When the game starts, that number is compared to DraftKings' final line. Getting a better number than the close, again and again, is the quickest real sign of an edge. A bet type needs ${C.min_n} tracked bets before it's judged. Value is how much better the number you got was than the closing number (the same number = 0%). Each bet counts at most 15% either way in the average, so one big news-driven move cannot swing it. Totals start on the bench and come back if they average +1% or better; other bet types get benched if they average below −0.5%.</p>
   <div class="panel tablewrap"><table><thead><tr><th>Bet</th><th>Status</th><th class="n">Beat the close</th><th class="n">Avg value</th><th class="n">Record</th><th class="n">Units</th></tr></thead><tbody>` +
     Object.entries(C.status).map(([k,x]) => `<tr><td><b>${ml0[k]}</b></td><td>${stPill(x)}${x.proven?"":` <span class="small">testing ${x.n}/${C.min_n}</span>`}</td><td class="n">${x.n?`${x.beat} (${pct(x.beat/x.n,0)})`:"–"}</td><td class="n ${x.avg>0?"pos":x.avg<0?"neg":""}">${x.avg==null?"–":sgn(x.avg*100,1)+"%"}</td><td class="n">${x.w+x.l?`${x.w}-${x.l}`:"–"}</td><td class="n ${x.units>0?"pos":x.units<0?"neg":""}">${x.w+x.l?sgn(x.units,1):"–"}</td></tr>`).join("") +
@@ -1085,18 +1125,18 @@ function renderDay(){
   const picks = [];
   for (const {k, g} of todays){
     useLeague(k);
-    const pk = (g.market_spread!=null || g.moneylines.length) ? pickFor(g) : null;
-    if (pk) picks.push({k, g, pk, label: pickLabel(g, pk.key), edge: edgeLevel(g, pk.b), need: M_implied(pk.b.price)});
+    const rk = recKey(g);
+    if (rk) picks.push({k, g, r: g.rec, label: pickLabel(g, rk)});
   }
-  picks.sort((a,b)=>b.pk.b.ev - a.pk.b.ev);
+  picks.sort((a,b)=>(b.r.rate??0) - (a.r.rate??0) || b.r.p_cover - a.r.p_cover);
   const [w, md] = lab(sel);
   h += `<div class="dayh"><h2 style="font-size:20px">${new Date(sel+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</h2><span class="small">${todays.length} games</span></div>` +
-       `<div class="legend"><span><span class="pill go">Pick</span> odds clearly in your favor</span><span><span class="pill">Lean</span> small edge, bet small or skip</span><span><span class="pill pass">Pass</span> fair price, no edge</span></div>`;
-  h += `<h2>Best plays today</h2>` + (picks.length ? `<div class="panel">` + picks.map(p =>
+       `<div class="legend"><span><span class="pill go">Strong</span> calls this sure hit 72%+</span><span><span class="pill go">Confident</span> 62 to 72%</span><span><span class="pill">Lean</span> 55 to 62%</span><span><span class="pill">Coin flip</span> under 55%</span></div>`;
+  h += `<h2>Our picks, most confident first</h2>` + (picks.length ? `<div class="panel">` + picks.map(p =>
     `<div class="bp" onclick="document.getElementById('card-${p.g.id}').scrollIntoView({behavior:'smooth',block:'start'})">
       <span class="lg" style="--lc:${SPORTC[p.k]}">${esc(ALL.leagues[p.k].league)}</span>
-      <div><b>${esc(p.label)}</b><div class="small">${esc(abbr(p.g,"away"))} @ ${esc(abbr(p.g,"home"))} · ${new Date(p.g.kickoff).toLocaleTimeString("en-US",{timeZone:ALL.tz,hour:"numeric",minute:"2-digit"})} · win chance ${pct(p.pk.b.p_cover,0)} · edge ${sgn((p.pk.b.p_cover-p.need)*100,0)}%</div></div>
-      <span class="pill ${p.edge.c}">${esc(p.edge.t)}</span></div>`).join("") + `</div>`
+      <div><b>${esc(p.label)}</b><div class="small">${esc(abbr(p.g,"away"))} @ ${esc(abbr(p.g,"home"))} · ${new Date(p.g.kickoff).toLocaleTimeString("en-US",{timeZone:ALL.tz,hour:"numeric",minute:"2-digit"})} · ${pct(p.r.p_cover,0)} to hit${p.r.rate!=null?` · right ${pct(p.r.rate,0)} historically`:""}</div></div>
+      <span class="pill ${confCls(p.r.conf)?"go":""}">${esc(p.r.conf||"")}</span></div>`).join("") + `</div>`
     : `<div class="panel"><div class="empty">No plays clear the bar today.</div></div>`);
   for (const k of ALL.order){
     const gs = todays.filter(x=>x.k===k);
@@ -1118,61 +1158,43 @@ function renderHome(){
     <span class="small">Updated ${when(ALL.generated)} · DraftKings lines</span></div><div id="livenow"></div>`;
   if (!focus){ $("#homeview").innerHTML = h + `<div class="empty">No games in the next 8 days.</div>`; return; }
 
-  // every pick, all sports, next 8 days
+  // the recommended bet for every game, all sports, next 8 days
   const picks = [];
+  const nowIso = new Date().toISOString();
   for (const {k, g} of allGames){
     useLeague(k);
-    const pk = (g.market_spread!=null || g.moneylines.length) ? pickFor(g) : null;
-    if (pk) picks.push({k, g, pk, day: DAYKEY(g.kickoff), label: pickLabel(g, pk.key), edge: edgeLevel(g, pk.b),
-                        margin: pk.b.p_cover - M_implied(pk.b.price), pts: playPoints(g, pk.key)});
+    const rk = recKey(g);
+    if (rk && g.kickoff > nowIso) picks.push({k, g, r: g.rec, key: rk, day: DAYKEY(g.kickoff), label: pickLabel(g, rk), pts: playPoints(g, rk)});
   }
   useLeague(CUR);
   const go = (p) => `location.hash='day/${p.day}';location.reload()`;
+  const score = p => (p.r.rate ?? 0) + p.r.p_cover / 100;
   const tile = p => `<div class="hp" tabindex="0" style="--lc:${SPORTC[p.k]}" onclick="${go(p)}">
-      <div class="t"><span><span class="lg" style="--lc:${SPORTC[p.k]}">${esc(ALL.leagues[p.k].league)}</span> <b>${esc(p.label)}</b></span><span class="pill ${p.edge.c}">${esc(p.edge.t)}</span></div>
+      <div class="t"><span><span class="lg" style="--lc:${SPORTC[p.k]}">${esc(ALL.leagues[p.k].league)}</span> <b>${esc(p.label)}</b></span><span class="pill ${confCls(p.r.conf)?"go":""}">${esc(p.r.conf||"")}</span></div>
       <div class="m">${esc(abbr(p.g,"away"))} @ ${esc(abbr(p.g,"home"))} · ${p.day===TODAY?"":esc(t12(p.day).toLocaleDateString("en-US",{weekday:"short"}))+" "}${time(p.g.kickoff)}</div>
-      <div class="m">Win chance <b style="color:var(--ink)">${pct(p.pk.b.p_cover,0)}</b> · Edge <b class="pos">${sgn(p.margin*100,0)}%</b>${p.pts[1] && p.pts[1][0]!=="Bet type" ? " · " + esc(p.pts[1][1]) : ""}</div></div>`;
+      <div class="m"><b style="color:var(--ink)">${pct(p.r.p_cover,0)}</b> to hit${p.r.rate!=null?` · calls this sure were right ${pct(p.r.rate,0)}`:""}</div></div>`;
 
-  // 1. top plays for the focus day
-  const top = picks.filter(p=>p.day===focus).sort((a,b)=>b.pk.b.ev-a.pk.b.ev).slice(0,7);
-  // featured: the best play that doesn't need a news check, your price range first
-  const inBand = p => p.pk.key.endsWith("_ml") && p.pk.b.price <= ALL.leagues[p.k].cfg.band_high && p.pk.b.price >= ALL.leagues[p.k].cfg.band_low;
-  const clean = top.filter(p => p.edge.c !== "warnp");
-  const feat = clean.find(inBand) || clean[0] || top[0];
+  // 1. our picks for the focus day, most confident first
+  const top = picks.filter(p=>p.day===focus).sort((a,b)=>score(b)-score(a));
+  const feat = top.find(p => !p.pts.some(x=>x[0]==="Heads up")) || top[0];
   if (feat){
     useLeague(feat.k);
-    const c = teamColors(feat.g), side = feat.pk.key.endsWith("_ml") ? feat.pk.key.slice(0,-3) : feat.pk.key;
+    const c = teamColors(feat.g);
     const reason = feat.pts.find(x => x[0] === "Main reason" || x[0] === "Keeps it close");
     h += `<div class="hero" tabindex="0" onclick="${go(feat)}">
       <div class="side away" style="--tc:${c.away};--tx:${textOn(c.away)}"><div class="ct">${esc(feat.g.away.replace(abbr(feat.g,"away"),"").trim() || "Away")}</div><div class="nm">${esc(abbr(feat.g,"away"))}</div><div class="ct">${pct(1-feat.g.p_home,0)} to win</div></div>
-      <div class="mid"><div class="tag">${esc(ALL.leagues[feat.k].league)} · ${feat.day===TODAY?"tonight":esc(dayName(feat.day))} ${time(feat.g.kickoff)} · featured play</div>
+      <div class="mid"><div class="tag">${esc(ALL.leagues[feat.k].league)} · ${feat.day===TODAY?"tonight":esc(dayName(feat.day))} ${time(feat.g.kickoff)} · most confident pick</div>
         <div class="bet">${esc(feat.label)}</div>
-        <div class="big">${pct(feat.pk.b.p_cover,0)}</div><div class="bl">win chance, ${sgn(feat.margin*100,0)}% edge</div>
+        <div class="big">${pct(feat.r.p_cover,0)}</div><div class="bl">chance it hits${feat.r.rate!=null?` · calls this sure were right ${pct(feat.r.rate,0)}`:""}</div>
         ${reason ? `<div class="why1">${esc(reason[1])}</div>` : ""}</div>
       <div class="side home" style="--tc:${c.home};--tx:${textOn(c.home)}"><div class="ct">${esc(feat.g.home.replace(abbr(feat.g,"home"),"").trim() || "Home")}</div><div class="nm">${esc(abbr(feat.g,"home"))}</div><div class="ct">${pct(feat.g.p_home,0)} to win</div></div>
     </div>`;
     useLeague(CUR);
   }
-  // most confident winner calls for the day, odds aside
-  const confident = [];
-  for (const {k, g} of allGames){
-    if (DAYKEY(g.kickoff) !== focus || !g.best.home_ml || !g.best.away_ml) continue;
-    useLeague(k);
-    const c = gameCalls(g).find(x => x.market === "moneyline");
-    if (c) confident.push({k, g, c, day: focus});
-  }
-  useLeague(CUR);
-  confident.sort((a,b) => b.c.p - a.c.p);
-  if (confident.length){
-    h += `<h2>Most confident calls ${focus===TODAY?"today":esc(dayName(focus))} <span class="small" style="font-family:var(--body);font-weight:400">who we think wins, odds aside</span></h2><div class="hgrid">` +
-      confident.slice(0,6).map(x => `<div class="hp" tabindex="0" style="--lc:${SPORTC[x.k]}" onclick="${go(x)}">
-        <div class="t"><span><span class="lg" style="--lc:${SPORTC[x.k]}">${esc(ALL.leagues[x.k].league)}</span> <b>${esc(x.c.text)}</b></span><span class="pill ${x.c.conf[1]==="s"||x.c.conf[1]==="c"?"go":""}">${esc(x.c.conf[0]||"")}</span></div>
-        <div class="m">${esc(abbr(x.g,"away"))} @ ${esc(abbr(x.g,"home"))} · ${time(x.g.kickoff)}</div>
-        <div class="m">Win chance <b style="color:var(--ink)">${pct(x.c.p,0)}</b>${x.c.r ? ` · calls this sure won ${pct(x.c.r.rate,0)}` : ""} · ${esc(ALL.leagues[x.k].board.find(g=>g.id===x.g.id).best[x.c.k].price>0?"+":"")}${ALL.leagues[x.k].board.find(g=>g.id===x.g.id).best[x.c.k].price} at DraftKings</div></div>`).join("") + `</div>`;
-  }
-  const rest = top.filter(p => p !== feat).slice(0,6);
-  h += `<h2>More plays ${focus===TODAY?"today":esc(dayName(focus))}</h2>` +
-       (rest.length ? `<div class="hgrid">${rest.map(tile).join("")}</div>` : !feat ? `<div class="panel"><div class="empty">No plays clear the bar ${focus===TODAY?"today":"that day"}.</div></div>` : `<div class="panel"><div class="empty">That's the only play that clears the bar.</div></div>`);
+  const rest = top.filter(p => p !== feat);
+  h += `<h2>Our picks ${focus===TODAY?"today":esc(dayName(focus))} <span class="small" style="font-family:var(--body);font-weight:400">one per game, most confident first, any odds</span></h2>` +
+       (rest.length ? `<div class="hgrid">${rest.slice(0,12).map(tile).join("")}</div>` + (rest.length > 12 ? `<div class="small">+${rest.length-12} more in By day.</div>` : "")
+                    : !feat ? `<div class="panel"><div class="empty">No games with lines ${focus===TODAY?"today":"that day"}.</div></div>` : "");
 
   // 2. -200 style plays this week
   const chalk = [];
@@ -1253,6 +1275,7 @@ const TIPS = {
   "Win chance": "How often the model thinks this bet wins.",
   "Edge": "Model's win chance minus the chance the price needs. +5% means it wins 5 points more often than the odds require.",
   "EV": "Expected value: average profit per $1 if you made this bet many times. +5% = about 5 cents per dollar. Real edges are usually 1 to 5%. Much bigger usually means the model is missing news.",
+  "Confidence": "How often the model's calls this sure were right over the last two seasons. Strong = 72%+, Confident = 62 to 72%, Lean = 55 to 62%, Coin flip = under 55%.",
   "Stake": "Suggested bet size as a share of your bankroll, based on the edge (quarter Kelly). Smaller is safer.",
   "Units": "Profit or loss with every bet sized at 1 unit. +3 units at $20 a unit = +$60.",
   "Result": "How the bet finished.",

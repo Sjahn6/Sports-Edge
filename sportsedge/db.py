@@ -58,9 +58,13 @@ def connect(path) -> sqlite3.Connection:
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)
     cols = {r[1] for r in con.execute("PRAGMA table_info(games)")}
-    for c in ("home_short", "away_short", "home_color", "away_color"):   # added after the first version
-        if c not in cols:
-            con.execute(f"ALTER TABLE games ADD COLUMN {c} TEXT")
+    for c, t in (("home_short", "TEXT"), ("away_short", "TEXT"), ("home_color", "TEXT"), ("away_color", "TEXT"),
+                 ("venue", "TEXT"), ("venue_city", "TEXT"), ("venue_state", "TEXT"), ("indoor", "INTEGER")):
+        if c not in cols:   # added after the first version
+            con.execute(f"ALTER TABLE games ADD COLUMN {c} {t}")
+    con.executescript("""CREATE TABLE IF NOT EXISTS weather (
+        game_id TEXT PRIMARY KEY, temp_f REAL, wind_mph REAL, gust_mph REAL, precip_prob REAL,
+        precip_in REAL, snow_in REAL, fetched_utc TEXT)""")
     return con
 
 
@@ -74,13 +78,16 @@ def set_meta(con, key, value):
 
 
 def upsert_game(con, g: dict):
+    g = {"venue": None, "venue_city": None, "venue_state": None, "indoor": None, **g}
     con.execute(
         """INSERT INTO games (id, league, season, season_type, week, date_utc,
                home_id, home, home_abbr, home_short, away_id, away, away_abbr, away_short,
-               home_color, away_color, home_score, away_score, completed, neutral)
+               home_color, away_color, home_score, away_score, completed, neutral,
+               venue, venue_city, venue_state, indoor)
            VALUES (:id, :league, :season, :season_type, :week, :date_utc,
                :home_id, :home, :home_abbr, :home_short, :away_id, :away, :away_abbr, :away_short,
-               :home_color, :away_color, :home_score, :away_score, :completed, :neutral)
+               :home_color, :away_color, :home_score, :away_score, :completed, :neutral,
+               :venue, :venue_city, :venue_state, :indoor)
            ON CONFLICT(id) DO UPDATE SET
                season=excluded.season, season_type=excluded.season_type,
                week=excluded.week, date_utc=excluded.date_utc,
@@ -88,6 +95,8 @@ def upsert_game(con, g: dict):
                away_id=excluded.away_id, away=excluded.away, away_abbr=excluded.away_abbr,
                home_short=excluded.home_short, away_short=excluded.away_short,
                home_color=COALESCE(excluded.home_color, games.home_color),
+               venue=COALESCE(excluded.venue, games.venue), venue_city=COALESCE(excluded.venue_city, games.venue_city),
+               venue_state=COALESCE(excluded.venue_state, games.venue_state), indoor=COALESCE(excluded.indoor, games.indoor),
                away_color=COALESCE(excluded.away_color, games.away_color),
                home_score=excluded.home_score, away_score=excluded.away_score,
                completed=excluded.completed, neutral=excluded.neutral""",

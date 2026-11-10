@@ -109,7 +109,16 @@ def parse_event(ev: dict, league: str):
         "away_score": _num(away.get("score")) if completed else None,
         "completed": 1 if completed else 0,
         "neutral": 1 if comp.get("neutralSite") else 0,
+        **_venue(comp),
     }
+
+
+def _venue(comp):
+    v = comp.get("venue") or {}
+    addr = v.get("address") or {}
+    ind = v.get("indoor")
+    return {"venue": v.get("fullName"), "venue_city": addr.get("city"), "venue_state": addr.get("state"),
+            "indoor": None if ind is None else (1 if ind else 0)}
 
 
 def fetch_week(league, season: int, week: int, season_type: int = 2, with_odds=False):
