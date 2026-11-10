@@ -59,6 +59,11 @@ def run(con, league, cfg, season, preds=None):
     for p in preds:
         periods[(p["season"], p["period"])].append(p)
 
+    # straight calls, price ignored: the side the model thinks is more likely in each market
+    EDGES = {"moneyline": [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 1.01],
+             "spread": [0.5, 0.53, 0.56, 0.6, 1.01], "total": [0.5, 0.53, 0.56, 0.6, 1.01]}
+    calls = {m: {"n": 0, "right": 0, "buckets": [{"lo": e[i], "hi": min(e[i + 1], 1.0), "n": 0, "right": 0}
+                                                  for i in range(len(e) - 1)]} for m, e in EDGES.items()}
     rows, bets = [], []
     for key in sorted(periods):
         grp = periods[key]
@@ -76,6 +81,24 @@ def run(con, league, cfg, season, preds=None):
             if not close:
                 continue
             ev = B.evaluate_game(g, p["ratings"], close, league, pcfg)
+            for m, keys, sides in (("moneyline", ("home_ml", "away_ml"), ("home", "away")),
+                                   ("spread", ("home", "away"), ("home", "away")), ("total", ("over", "under"), ("over", "under"))):
+                a, b2 = ev["best"].get(keys[0]), ev["best"].get(keys[1])
+                if not a or not b2:
+                    continue
+                take = 0 if a["p_cover"] >= b2["p_cover"] else 1
+                c = (a, b2)[take]
+                res, _ = _grade({"market": m, "side": sides[take], "point": c["point"], "price": c["price"]}, margin, total)
+                if res == "P":
+                    continue
+                cm = calls[m]
+                cm["n"] += 1
+                cm["right"] += res == "W"
+                for bk in cm["buckets"]:
+                    if bk["lo"] <= c["p_cover"] < bk["hi"] or (bk["hi"] == 1.0 and c["p_cover"] >= 1.0):
+                        bk["n"] += 1
+                        bk["right"] += res == "W"
+                        break
             picks, _ = B.select_picks(ev["plays"], set(cfg.get("benched") or []))
             pick_ids = {id(x) for x in picks}
             for pl in ev["plays"]:
@@ -128,5 +151,6 @@ def run(con, league, cfg, season, preds=None):
         **_summary(bets, cfg),
         "by_market": _summary(all_bets, cfg)["by_market"],   # every bet type, benched ones too
         "benched": sorted(benched),
+        "calls": calls,
         "old_rules": {k: v for k, v in _summary(all_bets, cfg).items() if k != "by_market"},
     }

@@ -232,6 +232,14 @@ button:focus-visible,.hp:focus-visible,.hero:focus-visible,summary:focus-visible
 th[data-tip]{cursor:help}
 .tipq{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:4px;border-radius:50%;
   font:700 10px/1 var(--body);background:rgba(127,127,127,.18);color:inherit;opacity:.75;vertical-align:1px;cursor:pointer}
+.calls{margin:12px 0;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel)}
+.calls .ch{font:800 15px/1 var(--display);letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between;align-items:baseline}
+.calls .cr{display:grid;grid-template-columns:78px 1fr auto;gap:2px 10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line)}
+.calls .cr:first-of-type{border-top:0}
+.calls .cl{color:var(--muted);font-size:12px} .calls .cv{font-weight:700} .calls .cp{font-weight:800;font-size:16px}
+.calls .cn{grid-column:2 / 4;font-size:12px;color:var(--muted)}
+.conf{font-size:11px;font-weight:700;padding:1px 7px;border-radius:99px;margin-left:6px;background:var(--chip);color:var(--muted)}
+.conf.s{background:var(--accent-soft);color:var(--accent)} .conf.c{background:var(--accent-soft);color:var(--accent);opacity:.85}
 .live:empty{display:none}
 .live{margin:10px 0 4px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .lv-h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;background:var(--chip)}
@@ -763,6 +771,44 @@ function pointsHtml(g, k){
   return `<div class="pts">` + playPoints(g,k).map(([l,t]) =>
     `<div class="pl${l==="Heads up"?" hu":""}">${esc(l)}</div><div>${esc(t)}</div>`).join("") + `</div>`;
 }
+
+// ---------- our call: the model's honest prediction for each market, price ignored
+function callRate(market, p){
+  const c = (D.backtest.calls||{})[market]; if (!c || !c.n) return null;
+  const b = c.buckets.find(x => p >= x.lo && (p < x.hi || x.hi >= 1)) ;
+  const use = b && b.n >= 25 ? b : null;   // small groups are noise: fall back to the overall rate
+  return {rate: use ? use.right/use.n : c.right/c.n, n: use ? use.n : c.n, all: c.right/c.n, alln: c.n, grouped: !!use};
+}
+function confWord(rate){
+  if (rate == null) return ["", ""];
+  if (rate >= 0.72) return ["Strong","s"];
+  if (rate >= 0.62) return ["Confident","c"];
+  if (rate >= 0.555) return ["Lean",""];
+  return ["Coin flip",""];
+}
+function gameCalls(g){
+  const out = [];
+  const one = (market, keys, label) => {
+    const a = g.best[keys[0]], b = g.best[keys[1]]; if (!a || !b) return;
+    const k = a.p_cover >= b.p_cover ? keys[0] : keys[1], x = g.best[k];
+    const r = callRate(market, x.p_cover);
+    let text;
+    if (market === "moneyline") text = `${abbr(g, k.slice(0,-3))} win`;
+    else if (market === "spread") text = `${abbr(g, k)} ${line(x.point)}`;
+    else text = `${k==="over"?"Over":"Under"} ${num(x.point).replace(/\.0$/,"")}`;
+    out.push({market, label, k, text, p: x.p_cover, r, conf: confWord(r && r.rate)});
+  };
+  one("moneyline", ["home_ml","away_ml"], "Winner");
+  if (D.key !== "nhl") one("spread", ["home","away"], "Spread");   // puck lines are almost always ±1.5 at long prices
+  one("total", ["over","under"], "Total");
+  return out;
+}
+function callsHtml(g){
+  const cs = gameCalls(g); if (!cs.length) return "";
+  return `<div class="calls"><div class="ch"><span>Our call</span><span class="small" style="font-family:var(--body);text-transform:none;letter-spacing:0;font-weight:400">who we think wins, odds aside</span></div>` +
+    cs.map(c => `<div class="cr"><div class="cl">${esc(c.label)}</div><div class="cv">${esc(c.text)}${c.conf[0]?`<span class="conf ${c.conf[1]}">${c.conf[0]}</span>`:""}</div><div class="cp">${pct(c.p,0)}</div>
+      ${c.r ? `<div class="cn">${c.r.grouped ? `Calls this sure were right <b>${pct(c.r.rate,0)}</b> of the time` : `${c.label} calls were right <b>${pct(c.r.rate,0)}</b> of the time`} over the last two seasons (${c.r.n} games).</div>` : ""}</div>`).join("") + `</div>`;
+}
 function cardHtml(g){
   const bh=g.best.home, ba=g.best.away, bo=g.best.over, bu=g.best.under;
   const hasLines = g.market_spread!=null || g.moneylines.length;
@@ -799,6 +845,7 @@ function cardHtml(g){
     <div class="live" data-live="${g.id}"></div>
     ${winBar(g)}
     ${matchupHtml(g)}
+    ${hasLines ? callsHtml(g) : ""}
     ${pickHtml}
     ${hasLines ? `<div class="mk-h">Every bet on this game</div>${marketsHtml(g)}` : ""}
     <details class="more"><summary>Show details</summary>
@@ -1105,6 +1152,23 @@ function renderHome(){
       <div class="side home" style="--tc:${c.home};--tx:${textOn(c.home)}"><div class="ct">${esc(feat.g.home.replace(abbr(feat.g,"home"),"").trim() || "Home")}</div><div class="nm">${esc(abbr(feat.g,"home"))}</div><div class="ct">${pct(feat.g.p_home,0)} to win</div></div>
     </div>`;
     useLeague(CUR);
+  }
+  // most confident winner calls for the day, odds aside
+  const confident = [];
+  for (const {k, g} of allGames){
+    if (DAYKEY(g.kickoff) !== focus || !g.best.home_ml || !g.best.away_ml) continue;
+    useLeague(k);
+    const c = gameCalls(g).find(x => x.market === "moneyline");
+    if (c) confident.push({k, g, c, day: focus});
+  }
+  useLeague(CUR);
+  confident.sort((a,b) => b.c.p - a.c.p);
+  if (confident.length){
+    h += `<h2>Most confident calls ${focus===TODAY?"today":esc(dayName(focus))} <span class="small" style="font-family:var(--body);font-weight:400">who we think wins, odds aside</span></h2><div class="hgrid">` +
+      confident.slice(0,6).map(x => `<div class="hp" tabindex="0" style="--lc:${SPORTC[x.k]}" onclick="${go(x)}">
+        <div class="t"><span><span class="lg" style="--lc:${SPORTC[x.k]}">${esc(ALL.leagues[x.k].league)}</span> <b>${esc(x.c.text)}</b></span><span class="pill ${x.c.conf[1]==="s"||x.c.conf[1]==="c"?"go":""}">${esc(x.c.conf[0]||"")}</span></div>
+        <div class="m">${esc(abbr(x.g,"away"))} @ ${esc(abbr(x.g,"home"))} · ${time(x.g.kickoff)}</div>
+        <div class="m">Win chance <b style="color:var(--ink)">${pct(x.c.p,0)}</b>${x.c.r ? ` · calls this sure won ${pct(x.c.r.rate,0)}` : ""} · ${esc(ALL.leagues[x.k].board.find(g=>g.id===x.g.id).best[x.c.k].price>0?"+":"")}${ALL.leagues[x.k].board.find(g=>g.id===x.g.id).best[x.c.k].price} at DraftKings</div></div>`).join("") + `</div>`;
   }
   const rest = top.filter(p => p !== feat).slice(0,6);
   h += `<h2>More plays ${focus===TODAY?"today":esc(dayName(focus))}</h2>` +
