@@ -51,6 +51,8 @@ def ensure(con):
     cols = {r[1] for r in con.execute("PRAGMA table_info(tracked)")}
     if "rec_utc" not in cols:   # when the site last made this its recommended bet for the game
         con.execute("ALTER TABLE tracked ADD COLUMN rec_utc TEXT")
+    if "top5_last" not in cols:   # last update where this bet was in the day's Top 5
+        con.execute("ALTER TABLE tracked ADD COLUMN top5_last TEXT")
 
 
 def _label(g, pl):

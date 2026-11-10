@@ -240,6 +240,13 @@ th[data-tip]{cursor:help}
 .calls .cn{grid-column:2 / 4;font-size:12px;color:var(--muted)}
 .conf{font-size:11px;font-weight:700;padding:1px 7px;border-radius:99px;margin-left:6px;background:var(--chip);color:var(--muted)}
 .conf.s{background:var(--accent-soft);color:var(--accent)} .conf.c{background:var(--accent-soft);color:var(--accent);opacity:.85}
+.t5{display:grid;grid-template-columns:54px 1fr;gap:12px;align-items:start;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--lc);border-radius:12px;padding:14px;margin-bottom:10px;cursor:pointer}
+.t5 .rk{font:800 40px/1 var(--display);color:var(--lc);text-align:center}
+.t5 .bt{font:800 22px/1.1 var(--display);letter-spacing:.01em}
+.t5 .mt{font-size:13px;color:var(--muted);margin-top:4px}
+.t5 .st{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:13px}
+.t5 .st b{font-size:17px}
+.t5 .wy{font-size:13px;margin-top:6px}
 .live:empty{display:none}
 .live{margin:10px 0 4px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .lv-h{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;background:var(--chip)}
@@ -275,6 +282,7 @@ th[data-tip]{cursor:help}
   <div class="sub" id="sub" style="margin:0 0 14px"></div>
   <section id="homeview"></section>
   <section id="dayview"></section>
+  <section id="topview"></section>
   <section id="chalk" class="on">
     <div class="note" id="ch-note"></div>
     <h2 style="margin-top:0">Moneyline favorites in your price range</h2>
@@ -328,7 +336,8 @@ th[data-tip]{cursor:help}
 <script>
 const ALL = /*__DATA__*/null;
 const HASH0 = location.hash.slice(1).split("/")[0];
-const HOMEMODE = !(HASH0 in ALL.leagues) && HASH0 !== "day";   // Home is the landing view
+const TOPMODE = HASH0 === "top5";
+const HOMEMODE = !(HASH0 in ALL.leagues) && HASH0 !== "day" && !TOPMODE;   // Home is the landing view
 const DAYMODE = HASH0 === "day";
 const CUR = (HASH0 in ALL.leagues) ? HASH0 : ALL.order[0];
 let D, U, U1, HOME, SPREAD;
@@ -375,19 +384,20 @@ function showTab(t){
   history.replaceState(null, "", "#" + CUR + "/" + t);
 }
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => showTab(b.dataset.t));
-document.documentElement.style.setProperty("--sport", (HOMEMODE || DAYMODE) ? "#ffb547" : SPORTC[CUR]);
+document.documentElement.style.setProperty("--sport", (HOMEMODE || DAYMODE || TOPMODE) ? "#ffb547" : SPORTC[CUR]);
 const DAYKEY = iso => new Date(iso).toLocaleDateString("en-CA",{timeZone:ALL.tz});
 const TODAY = new Date().toLocaleDateString("en-CA",{timeZone:ALL.tz});
 const allGames = ALL.order.flatMap(k => ALL.leagues[k].board.map(g => ({k, g})));
 $("#lsw").innerHTML = `<button style="--c:#2d5d8f" class="${HOMEMODE?"on":""}" onclick="location.hash='home';location.reload()"><b>Home</b><span>today at a glance</span></button>` +
-  `<button style="--c:#2d5d8f" class="${DAYMODE?"on":""}" onclick="location.hash='day';location.reload()"><b>By day</b><span>${allGames.filter(x=>DAYKEY(x.g.kickoff)===TODAY).length} games today, all sports</span></button>` + ALL.order.map(k => {
+  `<button style="--c:#2d5d8f" class="${DAYMODE?"on":""}" onclick="location.hash='day';location.reload()"><b>By day</b><span>${allGames.filter(x=>DAYKEY(x.g.kickoff)===TODAY).length} games today, all sports</span></button>` +
+  `<button style="--c:#c9862b" class="${TOPMODE?"on":""}" onclick="location.hash='top5';location.reload()"><b>Top 5</b><span>most confident picks</span></button>` + ALL.order.map(k => {
   const L = ALL.leagues[k];
   const n = L.board.filter(g => ["home_ml","away_ml"].some(s => g.best[s] && g.best[s].ev > 0 && g.best[s].price <= L.cfg.band_high && g.best[s].price >= L.cfg.band_low)).length;
   const day = new Date().toLocaleDateString("en-US",{timeZone:ALL.tz});
   const today = L.board.filter(g => new Date(g.kickoff).toLocaleDateString("en-US",{timeZone:ALL.tz}) === day).length;
   const games = L.key === "nfl" ? `${L.board.length} games this week` : today ? `${today} games today` : `${L.board.length} games this week`;
   const plays = n ? `<i class="dot"></i>${n} at ${price(L.cfg.target_price)}` : `none at ${price(L.cfg.target_price)}`;
-  return `<button style="--c:${SPORTC[k]}" class="${!DAYMODE && !HOMEMODE && k===CUR?"on":""}" onclick="location.hash='${k}/'+(location.hash.split('/')[1]||'chalk');location.reload()"><b>${esc(L.league)}</b><span>${games}</span></button>`;
+  return `<button style="--c:${SPORTC[k]}" class="${!DAYMODE && !HOMEMODE && !TOPMODE && k===CUR?"on":""}" onclick="location.hash='${k}/'+(location.hash.split('/')[1]||'chalk');location.reload()"><b>${esc(L.league)}</b><span>${games}</span></button>`;
 }).join("");
 { const t = location.hash.split("/")[1]; if (t && document.getElementById(t)) showTab(t); }
 
@@ -1266,6 +1276,57 @@ if (DAYMODE){
   $("#sub").textContent = `All sports · Updated ${when(ALL.generated)} · Lines from DraftKings`;
   document.title = "SportsEdge · By day";
   renderDay();
+}
+
+
+// ---------- Top 5: the most confident picks of the day, all sports
+function renderTop(){
+  const T = ALL.top5 || {days:{}};
+  const days = Object.keys(T.days).sort();
+  const nice = d => d === TODAY ? "Today" : new Date(d+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"});
+  const time = iso => new Date(iso).toLocaleTimeString("en-US",{timeZone:ALL.tz,hour:"numeric",minute:"2-digit"});
+  let h = `<div class="home-h"><h2>Top 5 picks</h2><span class="small">Updated ${when(ALL.generated)} · DraftKings lines</span></div>
+    <p class="small">The ${T.n||5} picks the analysis is most sure of each day, across every sport, at any odds. It skips coin-flip games and favorites priced worse than ${price(T.min_price||-400)} (one loss there wipes out four or more wins), so some days have fewer than 5.</p>`;
+  if (!days.length) h += `<div class="panel"><div class="empty">No picks yet for the next few days. Check back after the next update.</div></div>`;
+  for (const d of days){
+    const list = T.days[d];
+    h += `<h2>${esc(nice(d))} <span class="small" style="font-family:var(--body);font-weight:400">${list.length} pick${list.length===1?"":"s"}</span></h2>`;
+    if (!list.length){ h += `<div class="panel"><div class="empty">Nothing confident enough that day.</div></div>`; continue; }
+    for (const x of list){
+      const G0 = GAME[x.id]; if (!G0) continue;
+      useLeague(G0.k);
+      const g = G0.g, r = g.rec, k = recKey(g); if (!r || !k) continue;
+      const why = whyText(g, k, false).replace(/ (The odds|The odds are)[^.]*\.$/, "");
+      const inj = qbFlag(g), wx = wxText(g);
+      h += `<div class="t5" style="--lc:${SPORTC[G0.k]}" onclick="location.hash='day/${DAYKEY(g.kickoff)}';location.reload()">
+        <div class="rk">${x.rank}</div>
+        <div><div><span class="lg" style="--lc:${SPORTC[G0.k]}">${esc(D.league)}</span> <span class="pill ${confCls(r.conf)?"go":""}">${esc(r.conf)}</span></div>
+          <div class="bt" style="margin-top:6px">${esc(pickLabel(g, k))}</div>
+          <div class="mt">${esc(g.away)} at ${esc(g.home)} · ${esc(nice(DAYKEY(g.kickoff)))} ${time(g.kickoff)}${inj?` · <span style="color:var(--warn)">${esc(inj)}</span>`:""}</div>
+          <div class="st"><span>Chance it hits <b>${pct(r.p_cover,0)}</b></span>${r.rate!=null?`<span>Calls this sure: <b>${pct(r.rate,0)}</b> right</span>`:""}<span>Break-even <b>${pct(M_implied(r.price),0)}</b></span></div>
+          <div class="wy">${esc(why)}${wx ? " " + esc(wx) : ""}</div>
+          <div class="live" data-live="${g.id}"></div></div></div>`;
+    }
+  }
+  useLeague(CUR);
+  const R = (T.replay||{}), A = R.all, L = T.live || {n:0};
+  const f = s => s && s.n ? `${s.w}-${s.l} · ${pct(s.hit,0)} hit (needed ${pct(s.need,0)}) · <span class="${s.units>0?"pos":"neg"}">${sgn(s.units,1)} units</span> · ${sgn(s.roi*100,1)}% per bet` : "–";
+  h += `<h2>How this rule has done</h2><div class="panel tablewrap"><table><thead><tr><th>Group</th><th>Bets</th><th>Result</th></tr></thead><tbody>
+    <tr><td><b>Live</b> (from Nov 10)</td><td class="n">${L.n}</td><td>${L.n ? f(L) : "Starts counting as today's games finish."}</td></tr>
+    ${A ? `<tr><td><b>Replay, last two seasons</b> (${R.days} days)</td><td class="n">${A.n}</td><td>${f(A)}</td></tr>
+    <tr><td>Just the top 2 each day</td><td class="n">${R.top2.n}</td><td>${f(R.top2)}</td></tr>` +
+    (R.by_rank||[]).map(x => `<tr><td>#${x.rank} pick</td><td class="n">${x.n}</td><td>${f(x)}</td></tr>`).join("") +
+    Object.entries(R.by_league||{}).filter(([k,x])=>x.n).map(([k,x]) => `<tr><td>${esc(ALL.leagues[k].league)} picks</td><td class="n">${x.n}</td><td>${f(x)}</td></tr>`).join("") : ""}
+    </tbody></table></div>
+    <p class="small">The replay grades each pick at DraftKings' closing price, 1 unit each. It can't use injuries or weather (old reports aren't kept), which the live picks do. Per bet is the average profit or loss per 1 unit bet: −2% means about $2 lost per $100 bet over time.</p>`;
+  $("#topview").innerHTML = h;
+}
+if (TOPMODE){
+  document.querySelector(".stick nav").style.display = "none";
+  document.querySelectorAll("main > section").forEach(s => s.classList.toggle("on", s.id === "topview"));
+  $("#sub").style.display = "none";
+  document.title = "SportsEdge · Top 5";
+  renderTop();
 }
 
 // ---------- column notes: hover a header (or tap the ?) for what it means

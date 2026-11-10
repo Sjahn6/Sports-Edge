@@ -59,6 +59,18 @@ def conf_word(rate):
     return "Coin flip"
 
 
+TOP_N = 5
+TOP_MIN_PRICE = -400   # heavier favorites win often but one loss wipes out 4+ wins; they lost the most in the replay
+
+
+def top_rank(cands, n=TOP_N):
+    """cands: dicts with rec (from recommend). The n most confident, skipping -400 and worse
+    and coin flips (skipping coin flips cut the replay loss from -4.3% to -1.9% a bet)."""
+    ok = [c for c in cands if c["rec"] and c["rec"]["price"] >= TOP_MIN_PRICE and c["rec"]["conf"] != "Coin flip"]
+    ok.sort(key=lambda c: ((c["rec"]["rate"] or 0), c["rec"]["p_cover"]), reverse=True)
+    return ok[:n]
+
+
 def recommend(g, calls, league_key, pooled=None):
     best = None
     for market, keys, sides in MARKETS:

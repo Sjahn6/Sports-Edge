@@ -64,7 +64,7 @@ def run(con, league, cfg, season, preds=None):
              "spread": [0.5, 0.53, 0.56, 0.6, 1.01], "total": [0.5, 0.53, 0.56, 0.6, 1.01]}
     calls = {m: {"n": 0, "right": 0, "buckets": [{"lo": e[i], "hi": min(e[i + 1], 1.0), "n": 0, "right": 0}
                                                   for i in range(len(e) - 1)]} for m, e in EDGES.items()}
-    rows, bets = [], []
+    rows, bets, hist = [], [], []
     for key in sorted(periods):
         grp = periods[key]
         r0 = grp[0]["ratings"]
@@ -99,6 +99,15 @@ def run(con, league, cfg, season, preds=None):
                         bk["n"] += 1
                         bk["right"] += res == "W"
                         break
+            hb, hr = {}, {}
+            for kk, mk, sd in (("home_ml", "moneyline", "home"), ("away_ml", "moneyline", "away"), ("home", "spread", "home"),
+                               ("away", "spread", "away"), ("over", "total", "over"), ("under", "total", "under")):
+                x = ev["best"].get(kk)
+                if x:
+                    hb[kk] = {"p_cover": x["p_cover"], "price": x["price"], "point": x["point"], "ev": x["ev"], "book": "", "title": ""}
+                    hr[kk] = _grade({"market": mk, "side": sd, "point": x["point"], "price": x["price"]}, margin, total)
+            hist.append({"gid": g["id"], "date": g["date_utc"], "season": p["season"], "best": hb, "res": hr,
+                         "game": f'{B.short(g, "away")} @ {B.short(g, "home")}', "g": {k: g[k] for k in ("home", "away", "home_abbr", "away_abbr", "home_short", "away_short") if k in g}})
             picks, _ = B.select_picks(ev["plays"], set(cfg.get("benched") or []))
             pick_ids = {id(x) for x in picks}
             for pl in ev["plays"]:
@@ -152,5 +161,6 @@ def run(con, league, cfg, season, preds=None):
         "by_market": _summary(all_bets, cfg)["by_market"],   # every bet type, benched ones too
         "benched": sorted(benched),
         "calls": calls,
+        "_hist": hist,   # every replayed game's options, used for the Top 5 replay (not sent to the page)
         "old_rules": {k: v for k, v in _summary(all_bets, cfg).items() if k != "by_market"},
     }
