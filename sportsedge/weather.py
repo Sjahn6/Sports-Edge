@@ -22,12 +22,14 @@ UA = {"User-Agent": "SportsEdge/1.0"}
 
 
 def _geocode(con, city, state):
-    key = f"geo:{city},{state}"
+    key = f"geo2:{city},{state}"
     hit = D.get_meta(con, key)
     if hit:
         return json.loads(hit)
-    r = requests.get(GEO, params={"name": city, "count": 10, "country": "US", "language": "en"},
-                     headers=UA, timeout=20)
+    params = {"name": city, "count": 10, "language": "en"}
+    if state:   # US stadiums have a state; games abroad (London, Munich...) don't
+        params["countryCode"] = "US"
+    r = requests.get(GEO, params=params, headers=UA, timeout=20)
     r.raise_for_status()
     res = r.json().get("results") or []
     pick = None
