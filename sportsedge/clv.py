@@ -27,6 +27,7 @@ MIN_N = 40          # tracked bets before a bet type is judged
 PROMOTE = 0.01      # benched type comes back when average clv is above +1%
 BENCH = -0.005      # active type is benched when average clv falls below -0.5%
 START_BENCHED = {"total"}
+CAP = 0.15         # cap per bet in the average (a huge move is usually news, not the model)
 _N = NormalDist()
 
 SCHEMA = """
@@ -146,7 +147,8 @@ def status(con, league):
         rs = B.rows(con, "SELECT clv, result, profit FROM tracked WHERE league=? AND market=? AND clv IS NOT NULL",
                     (league.key, m))
         n = len(rs)
-        avg = (sum(r["clv"] for r in rs) / n) if n else None
+        # each bet capped at +/-15% so one news driven line move can't swing the average
+        avg = (sum(max(-CAP, min(CAP, r["clv"])) for r in rs) / n) if n else None
         beat = sum(r["clv"] > 0 for r in rs)
         done = [r for r in rs if r["result"] in ("W", "L", "P")]
         start = "benched" if m in START_BENCHED else "active"
